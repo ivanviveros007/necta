@@ -1,0 +1,23 @@
+{
+  "name": "@necta/cash-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Motor financiero puro de Caja a 14 días, compartido por API y móvil",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "bench": "node scripts/bench.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "vitest": "^5.0.5"
+  }
+}

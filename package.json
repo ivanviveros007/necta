@@ -1,0 +1,25 @@
+{
+  "name": "necta",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Necta \u00b7 Caja a 14 d\u00edas (API NestJS, web React/Vite, m\u00f3vil Expo)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build:packages": "npm run build -w @necta/contracts -w @necta/cash-engine",
+    "openspec:validate": "OPENSPEC_TELEMETRY=0 openspec validate caja-a-14-dias --strict"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "^1.14.2",
+    "typescript": "~6.0.3"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}

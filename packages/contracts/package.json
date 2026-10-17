@@ -1,0 +1,26 @@
+{
+  "name": "@necta/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Esquemas Zod y tipos compartidos de los contratos de Necta",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "4.6.7",
+    "@necta/cash-engine": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "vitest": "^5.0.5"
+  }
+}

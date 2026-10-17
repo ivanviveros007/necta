@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["vite/client", "@testing-library/jest-dom/vitest"],
+    "paths": {
+      "@necta/cash-engine": ["../../packages/cash-engine/src/index.ts"],
+      "@necta/contracts": ["../../packages/contracts/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
