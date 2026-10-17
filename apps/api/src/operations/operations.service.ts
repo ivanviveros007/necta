@@ -214,6 +214,8 @@ export class OperationsService {
       'receivable.payment': this.receivablePayment,
       'payable.payment': this.payablePayment,
       'receivable.reschedule': this.rescheduleReceivable,
+      'receivable.payment.void': this.voidReceivablePayment,
+      'payable.payment.void': this.voidPayablePayment,
       'commitment.create': this.createCommitment,
       'commitment.update': this.updateCommitment,
       'commitment.delete': this.deleteCommitment,
@@ -290,7 +292,7 @@ export class OperationsService {
     await this.assertNewId(this.movements, m.id, s);
     const affectsBalance = this.affects(ctx, bank, m.date);
     const [doc] = await this.movements.create(
-      [{ _id: m.id, storeId: ctx.storeId, kind: m.kind, amount: m.amount, bankId: m.bankId, date: m.date, description: m.description, affectsBalance, clientMutationId: op.clientMutationId, version: 1, ...this.stamp(seq) }],
+      [{ _id: m.id, storeId: ctx.storeId, kind: m.kind, amount: m.amount, bankId: m.bankId, date: m.date, description: m.description, affectsBalance, clientMutationId: op.clientMutationId, createdAt: this.clock.now(), version: 1, ...this.stamp(seq) }],
       { session: s },
     );
     await this.moveBank(ctx, m.bankId, m.kind === 'income' ? m.amount : -m.amount, affectsBalance, seq, s);
@@ -361,7 +363,7 @@ export class OperationsService {
         { _id: op.entityId, storeId: ctx.storeId, deletedAt: null, pendingAmount: { $gte: p.amount } },
         {
           $inc: { pendingAmount: -p.amount, version: 1 },
-          $push: { payments: { clientMutationId: op.clientMutationId, bankId: p.bankId, amount: p.amount, method: p.method, paymentDate: p.paymentDate } },
+          $push: { payments: { clientMutationId: op.clientMutationId, bankId: p.bankId, amount: p.amount, method: p.method, paymentDate: p.paymentDate, recordedAt: this.clock.now() } },
           $set: this.stamp(seq),
         },
         { returnDocument: 'after', session: s },
@@ -399,6 +401,66 @@ export class OperationsService {
       }
     }
     return { entityType: 'receivable', entity: MAPPERS.receivable(updated) };
+  };
+
+  /**
+   * Anula un pago: queda marcado (rastro), la deuda recupera el monto y el bolsillo lo revierte,
+   * todo en la misma transacción. Monto, bolsillo y fecha deben coincidir con lo guardado.
+   */
+  private async voidPayment(
+    model: Model<Doc>,
+    kind: 'receivable' | 'payable',
+    ctx: OperationContext,
+    op: Extract<SyncOperation, { type: 'receivable.payment.void' | 'payable.payment.void' }>,
+    seq: number,
+    s: ClientSession,
+  ): Promise<Doc> {
+    const p = op.payload;
+    const doc = await model.findOne({ _id: op.entityId, storeId: ctx.storeId }).session(s).lean<Doc>();
+    if (!doc || doc.deletedAt) throw new BusinessError('NOT_FOUND', 'Cuenta inexistente');
+    const payment = (doc.payments as Doc[]).find((x) => x.clientMutationId === p.paymentClientMutationId);
+    if (!payment) throw new BusinessError('NOT_FOUND', 'Pago inexistente');
+    if (payment.voidedAt) throw new BusinessError('PAYMENT_ALREADY_VOIDED', 'Ese pago ya fue anulado');
+    if (payment.amount !== p.amount || payment.bankId !== p.bankId || payment.paymentDate !== p.paymentDate) {
+      throw new BusinessError('VALIDATION_ERROR', 'Los datos no coinciden con el pago registrado');
+    }
+    const updated = await model
+      .findOneAndUpdate(
+        { _id: op.entityId, storeId: ctx.storeId },
+        { $set: { 'payments.$[p].voidedAt': this.clock.now(), ...this.stamp(seq) }, $inc: { pendingAmount: p.amount, version: 1 } },
+        { returnDocument: 'after', session: s, arrayFilters: [{ 'p.clientMutationId': p.paymentClientMutationId, 'p.voidedAt': null }] },
+      )
+      .lean<Doc>();
+    const bank = await this.bank(ctx, p.bankId, s);
+    await this.moveBank(ctx, p.bankId, (kind === 'receivable' ? -1 : 1) * p.amount, this.affects(ctx, bank, p.paymentDate), seq, s);
+    return updated!;
+  }
+
+  private voidReceivablePayment: Handler<'receivable.payment.void'> = async (ctx, op, seq, s) => {
+    const updated = await this.voidPayment(this.receivables, 'receivable', ctx, op, seq, s);
+    // La puntualidad deja de contar ese pago.
+    const due = updated.originalDueBy ?? updated.creditDueBy;
+    if (updated.counterpartyId && due) {
+      const cp = await this.counterparties.findOne({ _id: updated.counterpartyId, storeId: ctx.storeId }).session(s).lean<Doc>();
+      if (cp && cp.history?.payments > 0) {
+        const h = cp.history;
+        const daysLate = daysBetween(due, op.payload.paymentDate);
+        const late = daysLate > 0;
+        const lateBefore = h.payments - h.onTime;
+        const avgDaysLate = late ? (lateBefore > 1 ? ((h.avgDaysLate ?? 0) * lateBefore - daysLate) / (lateBefore - 1) : null) : h.avgDaysLate;
+        await this.counterparties.updateOne(
+          { _id: cp._id },
+          { $set: { history: { payments: h.payments - 1, onTime: Math.max(0, h.onTime - (late ? 0 : 1)), avgDaysLate }, ...this.stamp(seq) }, $inc: { version: 1 } },
+          { session: s },
+        );
+      }
+    }
+    return { entityType: 'receivable', entity: MAPPERS.receivable(updated) };
+  };
+
+  private voidPayablePayment: Handler<'payable.payment.void'> = async (ctx, op, seq, s) => {
+    const updated = await this.voidPayment(this.payables, 'payable', ctx, op, seq, s);
+    return { entityType: 'payable', entity: MAPPERS.payable(updated) };
   };
 
   private rescheduleReceivable: Handler<'receivable.reschedule'> = async (ctx, op, seq, s) => {

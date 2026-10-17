@@ -246,7 +246,11 @@ POST /v2/auth/logout
 // PATCH /v2/movements/:id { "clientMutationId", "baseVersion", "changes": { "amount"?, "description"?, "date"? } }
 // DELETE /v2/movements/:id { "clientMutationId", "baseVersion" }   (borrado lógico)
 
-// GET /v2/banks/:id/projection — existente, sin cambios
+// POST /v2/receivables/:id/reschedule { "clientMutationId", "baseVersion", "newDueDate" }  (guarda originalDueBy)
+// POST /v2/receivables/:id/payments/:paymentId/void { "clientMutationId" }  · ídem /v2/payables/...
+//      El pago queda con voidedAt; deuda + monto; bolsillo revertido; puntualidad recalculada.
+
+// GET /v2/banks/:id/projection — existente, sin cambios (ignora pagos anulados)
 { "storedLedgerBalance": 1300000, "projectedBalance": 1040000, "alignmentDelta": 260000 }
 // POST /v2/banks/:id/adjustments { "clientMutationId", "newBalance", "reason" }
 ```
@@ -284,7 +288,7 @@ POST /v2/auth/logout
 ```jsonc
 // POST /v2/sync/push
 { "operations": [ { "clientMutationId", "type": "movement.create|movement.update|movement.delete|sale.create|
-    receivable.payment|payable.payment|commitment.create|commitment.update|commitment.delete|baseline.update",
+    receivable.payment|payable.payment|receivable.payment.void|payable.payment.void|receivable.reschedule|commitment.create|commitment.update|commitment.delete|baseline.update",
     "entityId", "baseVersion"?, "dependsOn": ["…"], "payload": { … } } ] }
 // → { "results": [ { "clientMutationId", "status": "applied|duplicate|conflict|rejected|blocked",
 //                    "seq"?, "entity"?, "error"?: { "code", "message" }, "remote"? } ] }

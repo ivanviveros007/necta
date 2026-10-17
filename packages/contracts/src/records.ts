@@ -176,7 +176,13 @@ export const DebtPaymentEntitySchema = z.object({
   amount: z.number().int(),
   method: z.string(),
   paymentDate: LocalDateSchema,
+  /** Extensión: pago anulado (queda el rastro, no suma). */
+  voidedAt: z.string().nullable().default(null),
+  /** Extensión: instante en que se registró (ordena «Hoy»). */
+  recordedAt: z.string().nullable().default(null),
 });
+
+export const VoidPaymentRequestSchema = z.object({ clientMutationId: ClientMutationIdSchema });
 
 export const ReceivableEntitySchema = SyncMetaSchema.extend({
   id: IdSchema,
@@ -203,6 +209,8 @@ export const MovementEntitySchema = SyncMetaSchema.extend({
   date: LocalDateSchema,
   description: z.string(),
   affectsBalance: z.boolean(),
+  /** Instante de registro (ordena «Hoy»); null en datos anteriores. */
+  createdAt: z.string().nullable().default(null),
 });
 export type MovementEntity = z.infer<typeof MovementEntitySchema>;
 

@@ -116,6 +116,22 @@ describe('Editar un ingreso o gasto', () => {
   });
 });
 
+describe('Anular un cobro', () => {
+  it('desde «Hoy»: anular con doble confirmación devuelve la deuda y el saldo', async () => {
+    const fake = installFakeApi();
+    const { user } = renderApp('/');
+    await user.click(await screen.findByRole('button', { name: /Acción sugerida/ }));
+    await user.click(await screen.findByRole('button', { name: 'Ya pagó · Registrar $ 2,1 M' }));
+    expect(await screen.findByText('$ 4.000.000')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /Ver Cobro Hotel Brisas/ }));
+    await user.click(screen.getByRole('button', { name: 'Anular cobro' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, anular cobro de $ 2,1 M' }));
+    await waitFor(() => expect(fake.writes().at(-1)!.url).toMatch(/\/v2\/receivables\/rcv_brisas\/payments\/.+\/void$/));
+    expect(await screen.findByText('$ 1.900.000')).toBeInTheDocument();
+    expect(fake.snapshot.receivables.find((r) => r.id === 'rcv_brisas')!.pendingAmount).toBe(2_100_000);
+  });
+});
+
 describe('DetailPage', () => {
   it('tabla por día, escenario conservador y acciones que abren el cobro', async () => {
     installFakeApi();

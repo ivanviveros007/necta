@@ -3,7 +3,7 @@ import { Redirect, Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useLocalView, useNecta, useOutbox } from '../app-state/NectaProvider';
-import { MovementEditContent, TodaySection } from '../components/collect';
+import { MovementEditContent, PaymentVoidContent, TodaySection } from '../components/collect';
 import { ReceivableSheet } from '../components/ReceivableSheet';
 import { MovementForm } from '../components/forms';
 import { ActionChip, BalanceHeader, CashChart, CollectionsTable, HeaderTitle, KpiRow, PaymentsTable, SectionLink, SyncIndicator } from '../components/home';
@@ -13,7 +13,7 @@ import { todayActivity } from '../domain/todayActivity';
 import { useMovementEditor } from '../hooks/useMovementEditor';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
-type SheetState = { kind: 'entry' } | { kind: 'receivable'; id: string } | { kind: 'movement'; item: TodayItem } | null;
+type SheetState = { kind: 'entry' } | { kind: 'receivable'; id: string } | { kind: 'movement'; item: TodayItem } | { kind: 'payment'; item: TodayItem } | null;
 
 /** Home: saldo, mínimo proyectado, gráfico, indicadores, acción, pagos con estado, cobros y hoy. */
 export default function HomeScreen() {
@@ -71,7 +71,7 @@ export default function HomeScreen() {
             />
             <PaymentsTable payments={summary.payments} covered={summary.coveredCount} />
             <CollectionsTable items={summary.upcoming} onPress={(id) => setSheet({ kind: 'receivable', id })} />
-            <TodaySection activity={today} onEdit={(item) => setSheet({ kind: 'movement', item })} />
+            <TodaySection activity={today} onEdit={(item) => setSheet(item.payment ? { kind: 'payment', item } : { kind: 'movement', item })} />
           </>
         ) : (
           <Body>{sync?.phase === 'syncing' ? 'Sincronizando…' : 'Sin datos. Conéctate para sincronizar.'}</Body>
@@ -84,6 +84,16 @@ export default function HomeScreen() {
             {sheet?.kind === 'entry' ? <MovementForm {...ctx} onClose={close} /> : null}
           </Sheet>
           <ReceivableSheet receivableId={sheet?.kind === 'receivable' ? sheet.id : null} onClose={close} />
+          <Sheet open={sheet?.kind === 'payment'} onClose={close}>
+            {sheet?.kind === 'payment' ? (
+              <PaymentVoidContent
+                item={sheet.item}
+                bankName={v.snapshot.banks.find((b) => b.id === sheet.item.payment?.bankId)?.name ?? ''}
+                onVoid={() => editor.voidPayment(sheet.item)}
+                onClose={close}
+              />
+            ) : null}
+          </Sheet>
           <Sheet open={sheet?.kind === 'movement'} onClose={close}>
             {sheet?.kind === 'movement' && editing ? (
               <MovementEditContent

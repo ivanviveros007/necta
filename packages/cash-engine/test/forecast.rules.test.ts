@@ -287,3 +287,16 @@ describe('Reprogramar un cobro', () => {
     expect(r.scenarios.expected.firstShortfall).toMatchObject({ date: '2026-05-29', amount: 590_000 });
   });
 });
+
+describe('Anular un cobro pendiente', () => {
+  it('devuelve el monto a la deuda y lo saca de la caja, una sola vez', () => {
+    const paid = applyPendingOperations(limpiaYaSnapshot(), [
+      { type: 'receivable.payment', entityId: 'rcv_fina', payload: { bankId: 'bank_caja', amount: 600_000, paymentDate: '2026-05-25' } },
+    ]);
+    const voided = applyPendingOperations(paid, [
+      { type: 'receivable.payment.void', entityId: 'rcv_fina', payload: { paymentClientMutationId: 'c1', amount: 600_000, bankId: 'bank_caja', paymentDate: '2026-05-25' } },
+    ]);
+    expect(voided.receivables.find((r) => r.id === 'rcv_fina')!.pendingAmount).toBe(600_000);
+    expect(buildForecastInput(voided).balance.stored).toBe(1_900_000);
+  });
+});

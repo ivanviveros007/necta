@@ -43,6 +43,8 @@ export const api = {
   updateMovement: (id: string, body: { clientMutationId: string; baseVersion: number; changes: { amount?: number; description?: string; date?: string } }) =>
     http.patch<Applied<MovementEntity>>(`/v2/movements/${id}`, body),
   deleteMovement: (id: string, body: { clientMutationId: string; baseVersion: number }) => http.delete<Applied<MovementEntity>>(`/v2/movements/${id}`, body),
+  voidPayment: (kind: 'receivable' | 'payable', debtId: string, paymentId: string, clientMutationId: string) =>
+    http.post<Applied<ReceivableEntity>>(`/v2/${kind === 'receivable' ? 'receivables' : 'payables'}/${debtId}/payments/${encodeURIComponent(paymentId)}/void`, { clientMutationId }),
   collect: (receivableId: string, body: { clientMutationId: string; bankId: string; amount: number; paymentDate: string; method: string }) =>
     http.post<Applied<ReceivableEntity>>(`/v2/receivables/${receivableId}/payments`, body),
   reschedule: (receivableId: string, body: { clientMutationId: string; baseVersion: number; newDueDate: string }) =>

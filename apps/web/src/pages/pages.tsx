@@ -1,8 +1,8 @@
-import { describeSchedule, formatMoney, formatMoneyCompact, summarizeForecast, todayActivity } from '@necta/cash-engine';
+import { describeSchedule, formatMoney, formatMoneyCompact, summarizeForecast, todayActivity, type TodayItem } from '@necta/cash-engine';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { errorMessage } from '../api/client';
-import { MovementEditSheet, ReceivableSheet } from '../components/collect';
+import { MovementEditSheet, PaymentVoidSheet, ReceivableSheet } from '../components/collect';
 import { ActionsTable, AssumptionsToggle, DayTable, ScenarioToggle, UnscheduledTable } from '../components/detail';
 import { ActionChip, BalanceHeader, CashChart, CollectionsTable, KpiRow, PaymentsTable, SectionLink, SectionTitle, TodaySection } from '../components/home';
 import { CollectionForm, CommitmentForm, PaymentForm, SaleForm } from '../components/forms';
@@ -63,6 +63,7 @@ export function HomePage() {
   const today = useTodayData(store.businessDate);
   const [receivableId, setReceivableId] = useState<string | null>(null);
   const [movementId, setMovementId] = useState<string | null>(null);
+  const [paymentItem, setPaymentItem] = useState<TodayItem | null>(null);
   const editing = movementId ? (today.data?.movements.find((m) => m.id === movementId) ?? null) : null;
   const summary = useMemo(() => (forecast.data ? summarizeForecast(forecast.data, 30) : null), [forecast.data]);
   const activity = useMemo(() => (today.data ? todayActivity({ businessDate: store.businessDate, ...today.data }) : null), [today.data, store.businessDate]);
@@ -83,7 +84,8 @@ export function HomePage() {
       />
       <PaymentsTable payments={summary.payments} covered={summary.coveredCount} />
       <CollectionsTable items={summary.upcoming} onPress={setReceivableId} />
-      {activity ? <TodaySection activity={activity} onEdit={(item) => setMovementId(item.movementId ?? null)} /> : null}
+      {activity ? <TodaySection activity={activity} onEdit={(item) => (item.payment ? setPaymentItem(item) : setMovementId(item.movementId ?? null))} /> : null}
+      <PaymentVoidSheet item={paymentItem} online={online} onClose={() => setPaymentItem(null)} />
       <MovementEditSheet movement={editing} businessDate={store.businessDate} online={online} onClose={() => setMovementId(null)} />
       <ReceivableSheet receivableId={receivableId} businessDate={store.businessDate} online={online} onClose={() => setReceivableId(null)} />
     </>

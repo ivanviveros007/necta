@@ -100,3 +100,17 @@ export function receivableReschedule(newId: NewId, receivable: { id: string; ver
     write: null,
   };
 }
+
+/** Anular un cobro/pago ya confirmado (el servidor valida monto, bolsillo y fecha). */
+export function paymentVoid(newId: NewId, payment: { kind: 'receivable' | 'payable'; debtId: string; clientMutationId: string; amount: number; bankId: string; paymentDate: string }): Draft {
+  return {
+    operation: {
+      type: payment.kind === 'receivable' ? 'receivable.payment.void' : 'payable.payment.void',
+      clientMutationId: newId(),
+      dependsOn: [],
+      entityId: payment.debtId,
+      payload: { paymentClientMutationId: payment.clientMutationId, amount: payment.amount, bankId: payment.bankId, paymentDate: payment.paymentDate },
+    },
+    write: null,
+  };
+}

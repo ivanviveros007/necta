@@ -10,6 +10,7 @@ import {
   MovementCreateRequestSchema,
   MovementUpdateRequestSchema,
   RescheduleRequestSchema,
+  VoidPaymentRequestSchema,
   SaleBatchRequestSchema,
   type BankProjection,
   type SyncOperation,
@@ -77,7 +78,7 @@ export class RecordsController {
       this.payables.find({ storeId: store.id, 'payments.bankId': id }).lean<Doc[]>(),
     ]);
     const sumPayments = (docs: Doc[]) =>
-      docs.flatMap((d) => (d.payments as Doc[]).filter((p) => p.bankId === id)).reduce((a, p) => a + p.amount, 0);
+      docs.flatMap((d) => (d.payments as Doc[]).filter((p) => p.bankId === id && !p.voidedAt)).reduce((a, p) => a + p.amount, 0);
     const projected =
       bank.openingBalance +
       movs.reduce((a, m) => a + (m.kind === 'income' ? m.amount : -m.amount), 0) +
@@ -155,6 +156,38 @@ export class RecordsController {
   async payReceivable(@Auth() auth: AuthContext, @Store() store: StoreContext, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const { clientMutationId, ...payload } = parseBody(DebtPaymentRequestSchema, body);
     return this.run(auth, store, { type: 'receivable.payment', clientMutationId, dependsOn: [], entityId: id, payload }, res);
+  }
+
+  /** Extensión: anular un cobro mal cargado. El servidor toma monto, bolsillo y fecha del pago guardado. */
+  @Post('receivables/:id/payments/:paymentId/void')
+  voidReceivablePayment(@Auth() auth: AuthContext, @Store() store: StoreContext, @Param('id') id: string, @Param('paymentId') paymentId: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    return this.voidPayment('receivable', auth, store, id, paymentId, body, res);
+  }
+
+  /** Extensión: anular un pago mal cargado. */
+  @Post('payables/:id/payments/:paymentId/void')
+  voidPayablePayment(@Auth() auth: AuthContext, @Store() store: StoreContext, @Param('id') id: string, @Param('paymentId') paymentId: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    return this.voidPayment('payable', auth, store, id, paymentId, body, res);
+  }
+
+  private async voidPayment(kind: 'receivable' | 'payable', auth: AuthContext, store: StoreContext, id: string, paymentId: string, body: unknown, res: Response) {
+    const { clientMutationId } = parseBody(VoidPaymentRequestSchema, body);
+    const model = kind === 'receivable' ? this.receivables : this.payables;
+    const doc = await model.findOne({ _id: id, ...live(store.id) }).lean<Doc>();
+    const payment = (doc?.payments as Doc[] | undefined)?.find((p) => p.clientMutationId === paymentId);
+    if (!doc || !payment) throw new AppError('NOT_FOUND', 'Pago inexistente', HttpStatus.NOT_FOUND);
+    return this.run(
+      auth,
+      store,
+      {
+        type: kind === 'receivable' ? 'receivable.payment.void' : 'payable.payment.void',
+        clientMutationId,
+        dependsOn: [],
+        entityId: id,
+        payload: { paymentClientMutationId: paymentId, amount: payment.amount, bankId: payment.bankId, paymentDate: payment.paymentDate },
+      },
+      res,
+    );
   }
 
   /** Extensión: la clienta paga otro día. Escritura condicional por versión. */

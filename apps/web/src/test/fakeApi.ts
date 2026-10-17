@@ -125,6 +125,15 @@ export function installFakeApi(options: { loggedIn?: boolean } = {}) {
       if (!seen.has(body.clientMutationId)) payments.set(debt[2]!, [...(payments.get(debt[2]!) ?? []), body]);
       return apply(body.clientMutationId, { type, entityId: debt[2]!, payload: body } as PendingOperation, target);
     }
+    const voidMatch = /^\/v2\/(receivables|payables)\/([^/]+)\/payments\/([^/]+)\/void$/.exec(path);
+    if (method === 'POST' && voidMatch) {
+      const list = payments.get(voidMatch[2]!) ?? [];
+      const p = list.find((x) => x.clientMutationId === decodeURIComponent(voidMatch[3]!));
+      if (!p) return json(404, { code: 'NOT_FOUND', message: 'no' });
+      (p as { voidedAt?: string }).voidedAt = '2026-05-25T15:00:00.000Z';
+      const type = voidMatch[1] === 'receivables' ? 'receivable.payment.void' : 'payable.payment.void';
+      return apply(body.clientMutationId, { type, entityId: voidMatch[2]!, payload: { paymentClientMutationId: p.clientMutationId, amount: p.amount, bankId: p.bankId, paymentDate: p.paymentDate } } as PendingOperation, { id: voidMatch[2] });
+    }
     const resched = /^\/v2\/receivables\/([^/]+)\/reschedule$/.exec(path);
     if (method === 'POST' && resched) {
       const target = snapshot.receivables.find((d) => d.id === resched[1]);

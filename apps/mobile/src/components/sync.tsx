@@ -56,6 +56,8 @@ const TYPE_TEXT: Record<OutboxItem['type'], string> = {
   'receivable.payment': 'Cobro',
   'payable.payment': 'Pago',
   'receivable.reschedule': 'Nueva fecha de cobro',
+  'receivable.payment.void': 'Anulación de cobro',
+  'payable.payment.void': 'Anulación de pago',
   'commitment.create': 'Pago fijo o futuro',
   'commitment.update': 'Edición de pago fijo',
   'commitment.delete': 'Borrado de pago fijo',

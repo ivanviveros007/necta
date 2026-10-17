@@ -67,6 +67,8 @@ const DebtPaymentSchema = new Schema(
     amount: { type: Number, required: true },
     method: { type: String, required: true },
     paymentDate: { type: String, required: true },
+    voidedAt: { type: Date, default: null },
+    recordedAt: { type: Date, default: null },
   },
   { _id: false },
 );
@@ -102,6 +104,7 @@ export const MovementSchema = syncSchema({
   description: { type: String, default: '' },
   affectsBalance: { type: Boolean, required: true },
   clientMutationId: { type: String, required: true },
+  createdAt: { type: Date, default: null },
 });
 MovementSchema.index({ storeId: 1, date: 1 });
 

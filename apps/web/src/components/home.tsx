@@ -253,8 +253,8 @@ export function TodaySection({ activity, onEdit }: { activity: TodayActivity; on
           );
           return (
             <li key={i.key}>
-              {onEdit && i.movementId ? (
-                <button type="button" className="row-button" aria-label={`Editar ${i.label} ${formatMoney(i.amount)}`} onClick={() => onEdit(i)}>
+              {onEdit && (i.movementId || i.payment) ? (
+                <button type="button" className="row-button" aria-label={`${i.payment ? 'Ver' : 'Editar'} ${i.label} ${formatMoney(i.amount)}`} onClick={() => onEdit(i)}>
                   {content}
                   <span aria-hidden="true">›</span>
                 </button>

@@ -84,3 +84,41 @@ Las entidades editables SHALL tener `version` incrementada en cada cambio, `seq`
 #### Scenario: Borrar un gasto
 - **WHEN** se borra un gasto de 90.000 con la versión correcta
 - **THEN** el gasto queda con `deletedAt`, el saldo sube 90.000 y el cambio aparece en el pull
+
+### Requirement: Anular un cobro o pago mal cargado
+
+El sistema SHALL permitir anular un cobro o pago identificado por su `clientMutationId`: en una
+transacción el pago queda marcado como anulado (sin borrarse), la deuda recupera el monto, el bolsillo
+lo revierte y la puntualidad de la contraparte deja de contarlo. MUST NOT anular dos veces el mismo pago.
+
+#### Scenario: Anular un cobro
+- **WHEN** se anula el cobro de 600.000 de Tienda Doña Fina registrado hoy en caja
+- **THEN** el pendiente vuelve a 600.000, la caja baja 600.000, el pago conserva `voidedAt` y la proyección vuelve a contar ese cobro el viernes 29
+
+#### Scenario: Anulación repetida
+- **WHEN** se intenta anular otra vez un pago ya anulado con otra operación
+- **THEN** se rechaza con `PAYMENT_ALREADY_VOIDED` y nada cambia
+
+#### Scenario: Datos que no coinciden
+- **WHEN** la anulación llega con un monto distinto al del pago guardado
+- **THEN** se rechaza con `VALIDATION_ERROR`
+
+### Requirement: Reprogramar un cobro
+
+El sistema SHALL permitir cambiar el vencimiento de una cuenta por cobrar con `baseVersion`, conservando
+el vencimiento original para medir la puntualidad, y MUST NOT aceptar fechas anteriores a hoy ni deudas
+saldadas.
+
+#### Scenario: La clienta paga otro día
+- **WHEN** Hotel Brisas pasa del 28-may al 2-jun
+- **THEN** `creditDueBy` es 2026-06-02, `originalDueBy` es 2026-05-28 y el primer faltante esperado pasa al viernes 29
+
+### Requirement: Corregir o borrar un ingreso o gasto
+
+La dueña SHALL poder corregir monto, descripción y fecha (nunca futura) o borrar lógicamente un ingreso o
+gasto con `baseVersion`. En el móvil, si el alta aún no se envió, la corrección MUST reemplazar la
+operación pendiente en lugar de generar dos envíos.
+
+#### Scenario: Corrección antes de sincronizar
+- **WHEN** Carmen corrige sin señal un gasto que todavía no se envió
+- **THEN** la outbox conserva una sola operación de alta con el valor corregido

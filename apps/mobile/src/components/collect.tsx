@@ -255,9 +255,9 @@ export function TodaySection({ activity, onEdit }: { activity: TodayActivity; on
       {activity.items.map((i) => (
         <Pressable
           key={i.key}
-          disabled={!onEdit || !i.movementId}
+          disabled={!onEdit || !(i.movementId || i.payment)}
           onPress={() => onEdit?.(i)}
-          accessibilityRole={onEdit && i.movementId ? 'button' : undefined}
+          accessibilityRole={onEdit && (i.movementId || i.payment) ? 'button' : undefined}
           accessibilityLabel={`${i.label} ${formatMoney(i.amount)} ${i.state === 'pending' ? 'pendiente de enviar' : i.state === 'problem' ? 'con problema' : 'confirmado'}`}
           style={{ flexDirection: 'row', alignItems: 'center', minHeight: 48, borderBottomWidth: 1, borderColor: colors.line, gap: 8 }}
         >
@@ -273,7 +273,7 @@ export function TodaySection({ activity, onEdit }: { activity: TodayActivity; on
               {formatMoneyCompact(Math.abs(i.amount)).replace('$ ', '')}
             </Text>
           ) : null}
-          {onEdit && i.movementId ? <Text style={{ fontSize: 18, color: colors.brand }}>›</Text> : null}
+          {onEdit && (i.movementId || i.payment) ? <Text style={{ fontSize: 18, color: colors.brand }}>›</Text> : null}
         </Pressable>
       ))}
     </View>
@@ -341,6 +341,47 @@ export function MovementEditContent({
         variant="secondary"
         label={confirmDelete ? `Sí, eliminar ${formatMoneyCompact(current.amount)}` : 'Eliminar'}
         onPress={() => (confirmDelete ? void run(onDelete) : setConfirmDelete(true))}
+      />
+    </View>
+  );
+}
+
+/** Cobro o pago registrado: se anula (doble toque) y se vuelve a registrar si hace falta. */
+export function PaymentVoidContent({ item, bankName, onVoid, onClose }: { item: TodayItem; bankName: string; onVoid: () => Promise<void>; onClose: () => void }) {
+  const p = item.payment!;
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const noun = p.kind === 'receivable' ? 'cobro' : 'pago';
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <Text accessibilityRole="header" style={{ fontSize: 22, fontWeight: '800', color: colors.ink }} numberOfLines={1}>
+            {item.label}
+          </Text>
+          <Text style={{ fontSize: 15, color: colors.muted }}>
+            {formatDayShort(p.paymentDate)} · {bankName}
+            {item.state === 'pending' ? ' · ⏳ sin enviar' : ''}
+          </Text>
+        </View>
+        <Button variant="link" label="Cerrar" onPress={onClose} />
+      </View>
+      <Text style={{ textAlign: 'center', fontSize: 36, fontWeight: '800', marginVertical: 12, color: p.kind === 'receivable' ? colors.ok : colors.bad, ...num }}>
+        {p.kind === 'receivable' ? '+' : '−'}
+        {formatMoney(p.amount)}
+      </Text>
+      <Text style={{ textAlign: 'center', fontSize: 15, color: colors.muted, marginBottom: 8 }}>¿Lo cargaste mal? Anúlalo y vuelve a registrarlo con los datos correctos.</Text>
+      {error ? <Notice tone="bad">{error}</Notice> : null}
+      <Button
+        variant="secondary"
+        label={confirm ? `Sí, anular ${noun} de ${formatMoneyCompact(p.amount)}` : `Anular ${noun}`}
+        onPress={() => {
+          if (!confirm) return setConfirm(true);
+          setError(null);
+          void onVoid()
+            .then(onClose)
+            .catch((e: unknown) => setError(e instanceof Error ? e.message : 'No se pudo anular'));
+        }}
       />
     </View>
   );

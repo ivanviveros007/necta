@@ -30,6 +30,13 @@ const debtPayment = z.object({
   paymentDate: LocalDateSchema,
 });
 
+const voidPayment = z.object({
+  paymentClientMutationId: ClientMutationIdSchema,
+  amount: AmountSchema,
+  bankId: IdSchema,
+  paymentDate: LocalDateSchema,
+});
+
 export const SyncOperationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('movement.create'), payload: z.object({ movement: MovementInputSchema }) }),
   z.object({ ...versioned, type: z.literal('movement.update'), payload: z.object({ changes: MovementChangesSchema }) }),
@@ -37,6 +44,10 @@ export const SyncOperationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('sale.create'), payload: z.object({ sale: SaleSchema.extend({ id: IdSchema }) }) }),
   z.object({ ...base, entityId: IdSchema, type: z.literal('receivable.payment'), payload: debtPayment }),
   z.object({ ...base, entityId: IdSchema, type: z.literal('payable.payment'), payload: debtPayment }),
+  // Extensión: anular un cobro/pago mal cargado. Se identifica por el clientMutationId del pago; monto,
+  // bolsillo y fecha deben coincidir con lo guardado (permiten calcular el efecto sin señal).
+  z.object({ ...base, entityId: IdSchema, type: z.literal('receivable.payment.void'), payload: voidPayment }),
+  z.object({ ...base, entityId: IdSchema, type: z.literal('payable.payment.void'), payload: voidPayment }),
   // Extensión: la clienta avisó que paga otro día. Cambia el vencimiento; la puntualidad se mide contra el original.
   z.object({ ...versioned, type: z.literal('receivable.reschedule'), payload: z.object({ newDueDate: LocalDateSchema }) }),
   z.object({ ...base, type: z.literal('commitment.create'), payload: z.object({ commitment: CommitmentInputSchema }) }),

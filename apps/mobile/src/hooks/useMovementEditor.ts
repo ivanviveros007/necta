@@ -1,7 +1,7 @@
 import type { TodayItem } from '@necta/cash-engine';
 import type { MovementEntity, SyncOperation } from '@necta/contracts';
 import { useNecta } from '../app-state/NectaProvider';
-import { movementDelete, movementUpdate } from '../domain/operations';
+import { movementDelete, movementUpdate, paymentVoid } from '../domain/operations';
 
 export interface MovementChanges {
   amount: number;
@@ -59,6 +59,18 @@ export function useMovementEditor() {
           await repo!.record(draft.operation, draft.write);
         }
       }
+      void syncNow();
+    },
+    /** Anular un cobro/pago: si aún no se envió se quita de la cola; si ya se confirmó, operación de anulación. */
+    async voidPayment(item: TodayItem) {
+      if (!item.payment) throw new EditNotAllowedError('Este registro no es un cobro ni un pago');
+      if (item.pendingClientMutationId) {
+        await repo!.discard(item.pendingClientMutationId);
+        return;
+      }
+      if (item.state === 'pending') throw new EditNotAllowedError('Se está enviando. Podrás anularlo en unos segundos.');
+      const draft = paymentVoid(newId, item.payment);
+      await repo!.record(draft.operation, draft.write);
       void syncNow();
     },
     async remove(item: TodayItem) {

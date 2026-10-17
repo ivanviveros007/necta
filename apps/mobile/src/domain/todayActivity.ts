@@ -17,21 +17,28 @@ export function todayActivity(confirmed: StoreSnapshot, applied: StoreSnapshot, 
         state,
         movementId: m.id,
         pendingClientMutationId: o.status === 'pending' ? o.clientMutationId : undefined,
+        at: o.createdAt,
       });
-    } else if (op.type === 'receivable.payment') {
-      const r = applied.receivables.find((x) => x.id === op.entityId);
-      extra.push({ key: `o:${o.clientMutationId}`, label: `Cobro ${r?.counterpartyName ?? ''}`.trim(), amount: op.payload.amount, state });
-    } else if (op.type === 'payable.payment') {
-      const p = applied.payables.find((x) => x.id === op.entityId);
-      extra.push({ key: `o:${o.clientMutationId}`, label: `Pago ${p?.counterpartyName ?? ''}`.trim(), amount: -op.payload.amount, state });
+    } else if (op.type === 'receivable.payment' || op.type === 'payable.payment') {
+      const isReceivable = op.type === 'receivable.payment';
+      const debt = (isReceivable ? applied.receivables : applied.payables).find((x) => x.id === op.entityId);
+      extra.push({
+        key: `o:${o.clientMutationId}`,
+        label: `${isReceivable ? 'Cobro' : 'Pago'} ${debt?.counterpartyName ?? ''}`.trim(),
+        amount: isReceivable ? op.payload.amount : -op.payload.amount,
+        state,
+        pendingClientMutationId: o.status === 'pending' ? o.clientMutationId : undefined,
+        at: o.createdAt,
+        payment: { kind: isReceivable ? 'receivable' : 'payable', debtId: op.entityId, clientMutationId: o.clientMutationId, amount: op.payload.amount, bankId: op.payload.bankId, paymentDate: op.payload.paymentDate },
+      });
     } else if (op.type === 'sale.create') {
       const sale = op.payload.sale;
       const total = sale.items.reduce((a, i) => a + i.quantitiesSold * i.finalPrice, 0);
       const paid = sale.payments.reduce((a, p) => a + p.amount, 0);
-      extra.push({ key: `o:${o.clientMutationId}`, label: `Venta ${names.get(sale.customerId) ?? ''}${paid < total ? ' (crédito)' : ''}`.trim(), amount: paid, state });
+      extra.push({ key: `o:${o.clientMutationId}`, label: `Venta ${names.get(sale.customerId) ?? ''}${paid < total ? ' (crédito)' : ''}`.trim(), amount: paid, state, at: o.createdAt });
     } else if (op.type === 'receivable.reschedule') {
       const r = applied.receivables.find((x) => x.id === op.entityId);
-      extra.push({ key: `o:${o.clientMutationId}`, label: `${r?.counterpartyName ?? 'Cobro'} → ${op.payload.newDueDate.slice(5).split('-').reverse().join('/')}`, amount: 0, state });
+      extra.push({ key: `o:${o.clientMutationId}`, label: `${r?.counterpartyName ?? 'Cobro'} → ${op.payload.newDueDate.slice(5).split('-').reverse().join('/')}`, amount: 0, state, at: o.createdAt });
     }
   }
   // Movimientos confirmados con sus ediciones/borrados locales aplicados (sin duplicar altas pendientes).
@@ -52,5 +59,10 @@ export function todayActivity(confirmed: StoreSnapshot, applied: StoreSnapshot, 
     extra,
   );
   for (const item of result.items) if (item.movementId && touched.has(item.movementId) && item.state === 'confirmed') item.state = 'pending';
+  // Cobros/pagos con una anulación local aún no conciliada: ya no cuentan.
+  const voided = new Set(
+    outbox.flatMap((o) => (o.operation.type === 'receivable.payment.void' || o.operation.type === 'payable.payment.void' ? [o.operation.payload.paymentClientMutationId] : [])),
+  );
+  result.items = result.items.filter((i) => !(i.payment && voided.has(i.payment.clientMutationId)));
   return result;
 }

@@ -28,6 +28,7 @@ export type PendingOperation =
   | { type: 'receivable.payment'; entityId: string; payload: { bankId: string; amount: number; paymentDate: string } }
   | { type: 'payable.payment'; entityId: string; payload: { bankId: string; amount: number; paymentDate: string } }
   | { type: 'receivable.reschedule'; entityId: string; payload: { newDueDate: string } }
+  | { type: 'receivable.payment.void' | 'payable.payment.void'; entityId: string; payload: { paymentClientMutationId: string; amount: number; bankId: string; paymentDate: string } }
   | {
       type: 'commitment.create';
       payload: {
@@ -124,6 +125,17 @@ export function applyPendingOperations(base: StoreSnapshot, operations: readonly
         const amount = Math.min(op.payload.amount, r.pendingAmount);
         r.pendingAmount -= amount;
         adjustBank(s, op.payload.bankId, amount, op.payload.paymentDate);
+        break;
+      }
+      case 'receivable.payment.void':
+      case 'payable.payment.void': {
+        const list = op.type === 'receivable.payment.void' ? s.receivables : s.payables;
+        const d = list.find((x) => x.id === op.entityId) as (typeof list)[number] & { payments?: { clientMutationId: string; voidedAt?: string | null }[] } | undefined;
+        const p = d?.payments?.find((x) => x.clientMutationId === op.payload.paymentClientMutationId);
+        if (!d || (p && p.voidedAt)) break;
+        d.pendingAmount += op.payload.amount;
+        if (p) p.voidedAt = 'pending';
+        adjustBank(s, op.payload.bankId, op.type === 'receivable.payment.void' ? -op.payload.amount : op.payload.amount, op.payload.paymentDate);
         break;
       }
       case 'receivable.reschedule': {

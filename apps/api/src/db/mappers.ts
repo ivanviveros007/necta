@@ -53,6 +53,8 @@ const payments = (list: Doc[] | undefined) =>
     amount: p.amount,
     method: p.method,
     paymentDate: p.paymentDate,
+    voidedAt: iso(p.voidedAt),
+    recordedAt: iso(p.recordedAt),
   }));
 
 export const toReceivable = (d: Doc): ReceivableEntity => ({
@@ -77,6 +79,7 @@ export const toMovement = (d: Doc): MovementEntity => ({
   date: d.date,
   description: d.description ?? '',
   affectsBalance: Boolean(d.affectsBalance),
+  createdAt: iso(d.createdAt),
 });
 
 export const toCommitment = (d: Doc): CommitmentEntity => ({

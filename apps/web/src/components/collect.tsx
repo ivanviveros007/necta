@@ -1,4 +1,4 @@
-import { addDays, affectsStoredBalance, formatDayShort, formatMoney, formatMoneyCompact } from '@necta/cash-engine';
+import { addDays, affectsStoredBalance, formatDayShort, formatMoney, formatMoneyCompact, type TodayItem } from '@necta/cash-engine';
 import type { MovementEntity, ReceivableEntity } from '@necta/contracts';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { errorMessage } from '../api/client';
@@ -290,6 +290,44 @@ function MovementEditForm({ movement, businessDate, online, onClose }: { movemen
         onClick={() => (confirmDelete ? remove.mutate(undefined, { onSuccess: () => { renewDelete(); onClose(); } }) : setConfirmDelete(true))}
       >
         {confirmDelete ? `Sí, eliminar ${formatMoneyCompact(movement.amount)}` : 'Eliminar'}
+      </button>
+    </>
+  );
+}
+
+/** Cobro o pago ya registrado: se anula (queda el rastro) y, si hace falta, se vuelve a registrar. */
+export function PaymentVoidSheet({ item, online, onClose }: { item: TodayItem | null; online: boolean; onClose: () => void }) {
+  return (
+    <Sheet open={Boolean(item?.payment)} onClose={onClose} label="Cobro registrado">
+      {item?.payment ? <PaymentVoidForm key={item.key} item={item} online={online} onClose={onClose} /> : null}
+    </Sheet>
+  );
+}
+
+function PaymentVoidForm({ item, online, onClose }: { item: TodayItem; online: boolean; onClose: () => void }) {
+  const p = item.payment!;
+  const banks = useBanks().data ?? [];
+  const [confirm, setConfirm] = useState(false);
+  const [mutationId, renew] = useMutationId();
+  const mutation = useRecord(() => api.voidPayment(p.kind, p.debtId, p.clientMutationId, mutationId));
+  const noun = p.kind === 'receivable' ? 'cobro' : 'pago';
+  return (
+    <>
+      <SheetHeader title={item.label} subtitle={`${formatDayShort(p.paymentDate)} · ${banks.find((b) => b.id === p.bankId)?.name ?? p.bankId}`} onClose={onClose} />
+      <p className={`balance center ${p.kind === 'receivable' ? 'pos' : 'neg'}`}>
+        {p.kind === 'receivable' ? '+' : '−'}
+        {formatMoney(p.amount)}
+      </p>
+      <p className="muted center">¿Lo cargaste mal? Anúlalo y vuelve a registrarlo con los datos correctos.</p>
+      {!online ? <p className="warning" role="alert">Sin conexión: no se puede guardar.</p> : null}
+      {mutation.error ? <p className="error" role="alert">{errorMessage(mutation.error)}</p> : null}
+      <button
+        type="button"
+        className="secondary danger"
+        disabled={!online || mutation.isPending}
+        onClick={() => (confirm ? mutation.mutate(undefined, { onSuccess: () => { renew(); onClose(); } }) : setConfirm(true))}
+      >
+        {confirm ? `Sí, anular ${noun} de ${formatMoneyCompact(p.amount)}` : `Anular ${noun}`}
       </button>
     </>
   );
