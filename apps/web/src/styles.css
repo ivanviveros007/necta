@@ -88,7 +88,7 @@ input, select { font: inherit; min-height: 48px; padding: 8px 12px; border: 2px 
 .check input { min-height: auto; width: 24px; height: 24px; }
 .submit { margin-top: 16px; }
 
-.fab { position: fixed; right: 20px; bottom: 24px; width: 64px; height: 64px; border-radius: 50%; font-size: 2rem; background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+.fab { position: fixed; right: 20px; bottom: 24px; width: 64px; height: 64px; min-height: 64px; padding: 0; border: none; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
 .sheet { width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; margin: auto auto 0; border: none; border-radius: 16px 16px 0 0; padding: 16px 20px 28px; }
 .sheet .field { margin: 8px 0; }
 .sheet::backdrop { background: rgba(0, 0, 0, 0.45); }
@@ -197,3 +197,31 @@ details.assumptions ul { margin: 0; padding-left: 18px; color: var(--muted); fon
 .note.center { font-size: 0.85rem; color: var(--warn); }
 button.danger { border-color: var(--bad); color: var(--bad); }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+
+/* ---------- Pantallas angostas ----------
+   Un ítem flex no se achica por debajo de su contenido (min-width: auto): las filas-botón con nombres en
+   una sola línea ensanchaban toda la página. min-width: 0 deja que el nombre se recorte con «…». */
+.rows li > .row-button { flex: 1; min-width: 0; }
+.row-button .name, .action-chip .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.action-chip { min-width: 0; }
+.kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpi strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart figcaption { flex-wrap: wrap; gap: 4px 12px; }
+main, .topbar { max-width: 100%; }
+img, svg { max-width: 100%; }
+@media (max-width: 480px) {
+  /* En ancho de teléfono, misma escala que la app nativa (~16 pt). */
+  :root { font-size: 16px; }
+  main { padding: 12px 12px 120px; }
+  .topbar { padding: 8px 12px; gap: 4px 10px; }
+  .topbar .muted { display: none; }
+  .topbar nav a { font-size: 0.9rem; padding: 6px 0; }
+  .banner { padding: 8px 12px; font-size: 0.9rem; }
+  .balance { font-size: 2.1rem; }
+  .kpi { padding: 10px; }
+  .kpi strong { font-size: 1rem; }
+  .rows .date { width: 52px; }
+  section[aria-label='Saldo'] .pill { white-space: normal; max-width: 100%; }
+  .action-chip .tag { display: none; }
+  .topbar nav a { margin-right: 10px; }
+}

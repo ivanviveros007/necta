@@ -12,3 +12,9 @@ apps/mobile/.expo/
 web-build/
 *.log
 .DS_Store
+
+# Documentos de trabajo personales (no se versionan)
+CLAUDE.md
+PROMPT_CLAUDE.md
+PROPUESTA.md
+docs/guion-video.md

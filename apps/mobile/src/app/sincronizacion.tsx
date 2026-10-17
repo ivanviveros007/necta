@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView } from 'react-native';
 import { useNecta, useOutbox } from '../app-state/NectaProvider';
 import { OutboxList } from '../components/sync';
@@ -6,7 +7,8 @@ import { Body, Button, colors, Notice } from '../components/ui';
 import { useSyncActions } from '../hooks/useSyncActions';
 
 export default function SyncScreen() {
-  const { sync, syncNow, expired, logout, user } = useNecta();
+  const { sync, syncNow, expired, logout, user, repo } = useNecta();
+  const [resetError, setResetError] = useState<string | null>(null);
   const outbox = useOutbox();
   const actions = useSyncActions();
   const router = useRouter();
@@ -23,6 +25,19 @@ export default function SyncScreen() {
         <Button label="Sincronizar ahora" onPress={() => void syncNow()} />
       )}
       <OutboxList items={outbox.data ?? []} onKeepMine={(i) => void actions.keepMine(i)} onKeepServer={(i) => void actions.keepServer(i)} onDiscard={(i) => void actions.discard(i)} />
+      <Button
+        variant="secondary"
+        label="Volver a descargar todo"
+        disabled={pending > 0 || !repo}
+        onPress={() => {
+          setResetError(null);
+          void repo
+            ?.resetLocalCopy()
+            .then(() => syncNow())
+            .catch((e: unknown) => setResetError(e instanceof Error ? e.message : 'No se pudo'));
+        }}
+      />
+      {resetError ? <Notice tone="warn">{resetError}</Notice> : null}
       <Button
         variant="link"
         label="Cerrar sesión"

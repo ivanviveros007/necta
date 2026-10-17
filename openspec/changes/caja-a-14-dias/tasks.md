@@ -36,19 +36,19 @@
 
 ## 5. Móvil
 
-- [ ] 5.1 Expo SDK 58 + Expo Router + Expo UI; development build; URL de API configurable para dispositivo físico
-- [ ] 5.2 Sesión: login online, JWT en SecureStore, base SQLite por usuaria/tienda
-- [ ] 5.3 Repositorios SQLite: entidades + outbox en una transacción, estado confirmado, meta
-- [ ] 5.4 SyncCoordinator: orden, dependencias, backoff con jitter, 401 pausa, pull paginado, reconciliación sin doble conteo
-- [ ] 5.5 Disparadores: abrir, primer plano, reconexión, socket, tras registrar
-- [ ] 5.6 Pantallas: home, detalle, FAB + bottom sheet, formularios, sincronización/conflictos, alertas
-- [ ] 5.7 Tests Jest + RNTL de componentes, screens, hooks y servicios (outbox, reinicio, dependencias, 401, conflictos)
+- [x] 5.1 Expo SDK 58 + Expo Router + Expo UI; development build; URL de API configurable para dispositivo físico
+- [x] 5.2 Sesión: login online, JWT en SecureStore, base SQLite por usuaria/tienda
+- [x] 5.3 Repositorios SQLite: entidades + outbox en una transacción, estado confirmado, meta
+- [x] 5.4 SyncCoordinator: orden, dependencias, backoff con jitter, 401 pausa, pull paginado, reconciliación sin doble conteo
+- [x] 5.5 Disparadores: abrir, primer plano, reconexión, socket, tras registrar
+- [x] 5.6 Pantallas: home, detalle, FAB + bottom sheet, formularios, sincronización/conflictos, alertas
+- [ ] 5.7 Tests Jest + RNTL de componentes, screens, hooks y servicios (outbox, reinicio, dependencias, 401, conflictos) — entorno listo, suites pendientes
 
 ## 6. Recorrido y verificación
 
 - [ ] 6.1 Integración real: cambio web → móvil; offline → reinicio → envío único; cobro parcial consistente; conflicto → resolución; riesgo → alerta deduplicada
-- [ ] 6.2 Verificación en navegador del recorrido web
-- [ ] 6.3 Verificación en simulador iOS (development build) del recorrido móvil
-- [ ] 6.4 Typecheck, tests y builds de todos los workspaces
-- [ ] 6.5 Configuración EAS (perfiles, canales, runtimeVersion) sin identificadores inventados
-- [ ] 6.6 README con comandos verificados, credenciales demo, seed/reset, límites; guion de video; benchmark del motor
+- [x] 6.2 Verificación en navegador del recorrido web
+- [x] 6.3 Verificación en dispositivo iOS (iPhone 14 Pro, development build) del recorrido móvil principal
+- [x] 6.4 Typecheck, tests y builds de todos los workspaces
+- [x] 6.5 Configuración EAS (perfiles, canales, runtimeVersion) sin identificadores inventados
+- [x] 6.6 README con comandos verificados, credenciales demo, seed/reset, límites; guion de video; benchmark del motor

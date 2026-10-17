@@ -276,6 +276,20 @@ export class LocalRepository {
     this.notify();
   }
 
+  /**
+   * Borra la copia local confirmada y el cursor para volver a descargar todo (p. ej. tras resembrar la
+   * base de demo). Se niega si hay operaciones sin conciliar: nunca se pierde un registro pendiente.
+   */
+  async resetLocalCopy(): Promise<void> {
+    const pending = await this.db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) AS n FROM outbox`, []);
+    if ((pending?.n ?? 0) > 0) throw new Error('Hay registros sin enviar: sincroniza o resuélvelos antes de volver a descargar.');
+    await this.db.withExclusiveTransactionAsync(async (txn) => {
+      await txn.runAsync(`DELETE FROM entities`, []);
+      await txn.runAsync(`DELETE FROM meta WHERE key IN ('cursor', 'max_seq', 'last_sync_at', 'server_forecast')`, []);
+    });
+    this.notify();
+  }
+
   // ---------- lecturas ----------
 
   async entities<T>(type: EntityType): Promise<LocalEntity<T>[]> {

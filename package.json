@@ -12,7 +12,18 @@
   },
   "scripts": {
     "build:packages": "npm run build -w @necta/contracts -w @necta/cash-engine",
-    "openspec:validate": "OPENSPEC_TELEMETRY=0 openspec validate caja-a-14-dias --strict"
+    "openspec:validate": "OPENSPEC_TELEMETRY=0 openspec validate caja-a-14-dias --strict",
+    "mongo:start": "node scripts/mongo.mjs start",
+    "mongo:status": "node scripts/mongo.mjs status",
+    "mongo:stop": "node scripts/mongo.mjs stop",
+    "build:api": "npm run build:packages && npm run build -w @necta/api",
+    "seed": "npm run seed -w @necta/api",
+    "dev:api": "npm run start -w @necta/api",
+    "dev:web": "npm run dev -w @necta/web",
+    "dev:mobile": "npm run start -w @necta/mobile",
+    "typecheck": "npm run typecheck -w @necta/cash-engine -w @necta/contracts -w @necta/api -w @necta/web -w @necta/mobile",
+    "test": "npm test -w @necta/cash-engine -w @necta/contracts -w @necta/api -w @necta/web",
+    "bench": "npm run build -w @necta/cash-engine && node packages/cash-engine/scripts/bench.mjs"
   },
   "devDependencies": {
     "@fission-ai/openspec": "^1.14.2",
