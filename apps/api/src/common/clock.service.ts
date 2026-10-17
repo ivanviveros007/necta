@@ -15,6 +15,11 @@ export class ClockService {
     return this.config.businessDate ?? localDateInZone(this.now(), timeZone);
   }
 
+  /** La fecha de negocio está fijada por configuración (demo del caso), no es la real. */
+  isSimulated(): boolean {
+    return this.config.businessDate !== null;
+  }
+
   todayPolicy(): 'fullDay' | 'none' {
     return this.config.todayPolicy;
   }

@@ -21,11 +21,18 @@ export function movementCreate(
   };
 }
 
-export function movementUpdate(newId: NewId, current: MovementEntity, changes: { amount?: number; description?: string }, dependsOn: string[] = []): Draft {
+export function movementUpdate(newId: NewId, current: MovementEntity, changes: { amount?: number; description?: string; date?: string }, dependsOn: string[] = []): Draft {
   const clientMutationId = newId();
   return {
     operation: { type: 'movement.update', clientMutationId, dependsOn, entityId: current.id, baseVersion: current.version, payload: { changes } },
     write: { entityType: 'movement', entityId: current.id, localValue: { ...current, ...changes } },
+  };
+}
+
+export function movementDelete(newId: NewId, current: { id: string; version: number }): Draft {
+  return {
+    operation: { type: 'movement.delete', clientMutationId: newId(), dependsOn: [], entityId: current.id, baseVersion: current.version, payload: {} },
+    write: { entityType: 'movement', entityId: current.id, localValue: null },
   };
 }
 
@@ -84,4 +91,12 @@ export function commitmentCreate(newId: NewId, input: Omit<CommitmentInput, 'id'
 export function retryOnRemote(newId: NewId, original: SyncOperation, remoteVersion: number): SyncOperation | null {
   if (!('baseVersion' in original) || original.type === 'baseline.update') return null;
   return { ...original, clientMutationId: newId(), baseVersion: remoteVersion } as SyncOperation;
+}
+
+/** La clienta avisó que paga otro día: nuevo vencimiento sobre la versión conocida. */
+export function receivableReschedule(newId: NewId, receivable: { id: string; version: number }, newDueDate: string): Draft {
+  return {
+    operation: { type: 'receivable.reschedule', clientMutationId: newId(), dependsOn: [], entityId: receivable.id, baseVersion: receivable.version, payload: { newDueDate } },
+    write: null,
+  };
 }

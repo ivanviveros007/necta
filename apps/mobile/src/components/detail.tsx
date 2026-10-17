@@ -66,6 +66,8 @@ export function DayTable({ scenario }: { scenario: ScenarioResult }) {
   );
 }
 
+const actsOnReceivable = (a: RecommendedAction) => (a.kind === 'confirm_collection' || a.kind === 'collect') && Boolean(a.sourceId);
+
 const VERB: Record<RecommendedAction['kind'], { text: string; color: string }> = {
   confirm_collection: { text: 'Confirmar', color: colors.brand },
   collect: { text: 'Cobrar', color: colors.ok },
@@ -73,12 +75,19 @@ const VERB: Record<RecommendedAction['kind'], { text: string; color: string }> =
 };
 
 /** Acciones: verbo · contraparte · monto · efecto (✓ resuelve, +N días). */
-export function ActionsTable({ actions }: { actions: RecommendedAction[] }) {
+export function ActionsTable({ actions, onReceivable }: { actions: RecommendedAction[]; onReceivable?: (id: string) => void }) {
   if (actions.length === 0) return <Text style={{ fontSize: 15, color: colors.muted }}>Sin acciones</Text>;
   return (
     <View>
       {actions.map((a) => (
-        <View key={a.id} accessibilityLabel={a.detail} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 50, borderBottomWidth: 1, borderColor: colors.line }}>
+        <Pressable
+          key={a.id}
+          accessibilityRole={actsOnReceivable(a) && onReceivable ? 'button' : undefined}
+          accessibilityLabel={a.detail}
+          disabled={!actsOnReceivable(a) || !onReceivable}
+          onPress={() => a.sourceId && onReceivable?.(a.sourceId)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 50, borderBottomWidth: 1, borderColor: colors.line }}
+        >
           <View style={{ width: 84, alignItems: 'center', paddingVertical: 4, borderRadius: 999, backgroundColor: VERB[a.kind].color }}>
             <Text style={{ fontSize: 12, fontWeight: '800', color: '#FFFFFF' }}>{VERB[a.kind].text}</Text>
           </View>
@@ -89,7 +98,8 @@ export function ActionsTable({ actions }: { actions: RecommendedAction[] }) {
           <Text style={{ width: 52, textAlign: 'right', fontSize: 14, fontWeight: '800', color: a.impact.resolves ? colors.ok : colors.muted }}>
             {a.kind === 'postpone' && a.postponeDays ? `+${a.postponeDays} d` : a.kind === 'confirm_collection' ? formatDayShort(a.riskDate).split(' ').slice(0, 2).join(' ') : a.impact.resolves ? '✓' : '—'}
           </Text>
-        </View>
+          <Text style={{ width: 12, fontSize: 18, color: colors.brand }}>{actsOnReceivable(a) && onReceivable ? '›' : ''}</Text>
+        </Pressable>
       ))}
     </View>
   );
@@ -103,13 +113,20 @@ const REASON: Record<UnscheduledReceivable['reason'], string> = {
   due_after_window: 'vence después',
 };
 
-export function UnscheduledTable({ items }: { items: UnscheduledReceivable[] }) {
+export function UnscheduledTable({ items, onReceivable }: { items: UnscheduledReceivable[]; onReceivable?: (id: string) => void }) {
   const visible = items.filter((u) => u.reason !== 'due_after_window');
   if (visible.length === 0) return <Text style={{ fontSize: 15, color: colors.muted }}>Ninguno</Text>;
   return (
     <View>
       {visible.map((u) => (
-        <View key={u.receivableId} accessibilityLabel={u.basis} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, borderBottomWidth: 1, borderColor: colors.line }}>
+        <Pressable
+          key={u.receivableId}
+          accessibilityRole={onReceivable ? 'button' : undefined}
+          accessibilityLabel={u.basis}
+          disabled={!onReceivable}
+          onPress={() => onReceivable?.(u.receivableId)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, borderBottomWidth: 1, borderColor: colors.line }}
+        >
           <Text style={{ flex: 1, fontSize: 15, color: colors.ink }} numberOfLines={1}>
             {u.counterpartyName}
           </Text>
@@ -118,7 +135,8 @@ export function UnscheduledTable({ items }: { items: UnscheduledReceivable[] }) 
             {u.reason === 'overdue' ? ` ${u.daysOverdue} d` : ''}
           </Text>
           <Text style={{ width: 84, textAlign: 'right', fontSize: 15, fontWeight: '700', color: colors.ink, ...num }}>{formatMoneyCompact(u.pendingAmount)}</Text>
-        </View>
+          <Text style={{ width: 12, fontSize: 18, color: colors.brand }}>{onReceivable ? '›' : ''}</Text>
+        </Pressable>
       ))}
     </View>
   );

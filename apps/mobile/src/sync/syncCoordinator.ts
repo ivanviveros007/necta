@@ -21,6 +21,8 @@ export interface SyncDeps {
   random?: () => number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
+  /** Límite de un ciclo completo (push + pull) antes de liberarlo. */
+  cycleTimeoutMs?: number;
 }
 
 const BATCH = 50;
@@ -46,12 +48,14 @@ export class SyncCoordinator {
   private readonly random: () => number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (h: unknown) => void;
+  private readonly cycleTimeoutMs: number;
 
   constructor(private readonly deps: SyncDeps) {
     this.now = deps.now ?? Date.now;
     this.random = deps.random ?? Math.random;
     this.setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
+    this.cycleTimeoutMs = deps.cycleTimeoutMs ?? 60_000;
   }
 
   getState(): SyncState {
@@ -65,6 +69,7 @@ export class SyncCoordinator {
 
   private set(patch: Partial<SyncState>): void {
     this.state = { ...this.state, ...patch };
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && patch.phase) console.log(`[sync] ${patch.phase}${this.state.lastError ? ` · ${this.state.lastError}` : ''}`);
     this.listeners.forEach((l) => l(this.state));
   }
 
@@ -82,12 +87,29 @@ export class SyncCoordinator {
     this.running = (async () => {
       do {
         this.again = false;
-        await this.cycle();
+        await this.cycleWithWatchdog();
       } while (this.again && this.state.phase === 'idle');
     })().finally(() => {
       this.running = null;
     });
     return this.running;
+  }
+
+  /** Un ciclo nunca bloquea a los siguientes: si excede el límite se da por fallido y se reintenta. */
+  private async cycleWithWatchdog(): Promise<void> {
+    let timer: unknown = null;
+    const watchdog = new Promise<'timeout'>((resolve) => {
+      timer = this.setTimer(() => resolve('timeout'), this.cycleTimeoutMs);
+    });
+    const outcome = await Promise.race([this.cycle().then(() => 'done' as const), watchdog]);
+    this.clearTimer(timer);
+    if (outcome === 'timeout') {
+      await this.deps.repo.revertSending('La sincronización tardó demasiado');
+      const attempt = this.state.attempt + 1;
+      const delay = retryDelayMs(attempt, this.random);
+      this.timer = this.setTimer(() => void this.run(), delay);
+      this.set({ phase: 'error', attempt, lastError: 'La sincronización tardó demasiado', nextRetryAt: new Date(this.now() + delay).toISOString() });
+    }
   }
 
   dispose(): void {
@@ -143,7 +165,9 @@ export class SyncCoordinator {
       if (pending.length === 0) return;
       await this.deps.repo.markSending(pending.map((p) => p.clientMutationId));
       // Se reenvía el payload original, sin modificar (idempotencia).
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[sync] push ${pending.length}`);
       const { results } = await this.deps.api.push(token, this.deps.storeId, pending.map((p) => p.operation));
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[sync] push ok ${results.map((r) => r.status).join(',')}`);
       await this.deps.repo.applyPushResults(results);
       if (pending.length < BATCH) return;
     }

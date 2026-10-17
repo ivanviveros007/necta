@@ -24,32 +24,58 @@ describe('parseAmount', () => {
   });
 });
 
-describe('MovementForm', () => {
+describe('MovementForm (botón +)', () => {
   let fake: ReturnType<typeof installFakeApi>;
   beforeEach(() => {
     fake = installFakeApi();
     setOnline(true);
   });
 
-  it('registra un gasto con fecha de negocio y bolsillo', async () => {
+  it('registra un gasto con monto grande y fecha de negocio', async () => {
     let done = false;
     const { user } = renderForm(<MovementForm {...props} onDone={() => (done = true)} />);
     await user.type(screen.getByLabelText('Monto (COP)'), '45000');
-    expect(screen.getByText('$ 45.000')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(screen.getByLabelText('Monto (COP)')).toHaveValue('45.000');
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto $ 45 mil' }));
     await waitFor(() => expect(done).toBe(true));
-    const write = fake.writes()[0]!;
-    expect(write.url).toBe('/v2/movements');
-    expect(write.body).toMatchObject({ movement: { kind: 'expense', amount: 45_000, bankId: 'bank_caja', date: '2026-05-25' } });
-    expect(write.headers['x-csrf-token']).toBeUndefined(); // sin sesión iniciada en esta prueba aislada
+    expect(fake.writes()[0]!.body).toMatchObject({ movement: { kind: 'expense', amount: 45_000, bankId: 'bank_caja', date: '2026-05-25' } });
   });
 
-  it('un ingreso que es cobro ofrece registrarlo como cobro', async () => {
-    let redirected = false;
-    const { user } = renderForm(<MovementForm {...props} onIsCollection={() => (redirected = true)} />);
-    await user.click(screen.getByRole('button', { name: 'Ingreso' }));
-    await user.click(screen.getByRole('button', { name: 'Regístralo como cobro' }));
-    expect(redirected).toBe(true);
+  it('fecha: Hoy por defecto; Ayer manda la fecha pasada y avisa que va al historial', async () => {
+    const { user } = renderForm(<MovementForm {...props} />);
+    expect(screen.getByRole('button', { name: 'Hoy' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'Ayer' }));
+    expect(await screen.findByText(/completa el historial, no cambia el saldo/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Monto (COP)'), '20000');
+    await user.click(screen.getByRole('button', { name: /Guardar gasto/ }));
+    await waitFor(() => expect(fake.writes()).toHaveLength(1));
+    expect(fake.writes()[0]!.body).toMatchObject({ movement: { date: '2026-05-24' } });
+  });
+
+  it('fecha: Otra abre un calendario que no permite fechas futuras', async () => {
+    const { user } = renderForm(<MovementForm {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Otra' }));
+    const input = screen.getByLabelText('Otra fecha');
+    expect(input).toHaveAttribute('max', '2026-05-25');
+  });
+
+  it('ingreso al banco con los botones de bolsillo', async () => {
+    const { user } = renderForm(<MovementForm {...props} />);
+    await user.click(screen.getByRole('button', { name: '+ Ingreso' }));
+    await user.click(await screen.findByRole('button', { name: 'Banco' }));
+    await user.type(screen.getByLabelText('Monto (COP)'), '100000');
+    await user.click(screen.getByRole('button', { name: 'Guardar ingreso $ 100 mil' }));
+    await waitFor(() => expect(fake.writes()).toHaveLength(1));
+    expect(fake.writes()[0]!.body).toMatchObject({ movement: { kind: 'income', bankId: 'bank_banco' } });
+  });
+
+  it('Cobro: elegir quién pagó y registrar sin duplicar como ingreso', async () => {
+    const { user } = renderForm(<MovementForm {...props} />);
+    await user.click(screen.getByRole('button', { name: 'Cobro' }));
+    await user.click(await screen.findByRole('button', { name: /Tienda Doña Fina/ }));
+    await user.click(screen.getByRole('button', { name: 'Ya pagó · Registrar $ 600 mil' }));
+    await waitFor(() => expect(fake.writes()).toHaveLength(1));
+    expect(fake.writes()[0]!.url).toBe('/v2/receivables/rcv_fina/payments');
   });
 
   it('sin red: aviso, botón deshabilitado y lo escrito se conserva', async () => {
@@ -61,20 +87,20 @@ describe('MovementForm', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole('alert')).toHaveTextContent('Sin conexión: no se puede guardar');
-    expect(screen.getByRole('button', { name: 'Guardar' })).toBeDisabled();
-    expect(screen.getByLabelText('Monto (COP)')).toHaveValue('30000');
+    expect(screen.getByRole('button', { name: /Guardar gasto/ })).toBeDisabled();
+    expect(screen.getByLabelText('Monto (COP)')).toHaveValue('30.000');
   });
 
   it('error de la API se explica y el formulario no se pierde', async () => {
     fake.override('POST', '/v2/movements', () => ({ status: 422, body: { code: 'FUTURE_DATE_NOT_ALLOWED', message: 'futura' } }));
     const { user } = renderForm(<MovementForm {...props} />);
     await user.type(screen.getByLabelText('Monto (COP)'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: /Guardar gasto/ }));
     expect(await screen.findByRole('alert')).toHaveTextContent('no puede tener fecha futura');
-    expect(screen.getByLabelText('Monto (COP)')).toHaveValue('1000');
+    expect(screen.getByLabelText('Monto (COP)')).toHaveValue('1.000');
   });
 
-  it('reintento tras una falla de red reutiliza el mismo clientMutationId', async () => {
+  it('reintento tras una falla reutiliza el mismo clientMutationId', async () => {
     let calls = 0;
     fake.override('POST', '/v2/movements', () => {
       calls += 1;
@@ -82,9 +108,9 @@ describe('MovementForm', () => {
     });
     const { user } = renderForm(<MovementForm {...props} />);
     await user.type(screen.getByLabelText('Monto (COP)'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: /Guardar gasto/ }));
     await screen.findByRole('alert');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: /Guardar gasto/ }));
     await waitFor(() => expect(fake.writes()).toHaveLength(2));
     const [a, b] = fake.writes() as { body: { clientMutationId: string } }[];
     expect(a!.body.clientMutationId).toBe(b!.body.clientMutationId);

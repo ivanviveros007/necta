@@ -17,7 +17,7 @@ describe('LoginPage', () => {
     await user.clear(screen.getByLabelText('Contraseña'));
     await user.type(screen.getByLabelText('Contraseña'), 'Necta2026!');
     await user.click(screen.getByRole('button', { name: 'Ingresar' }));
-    expect(await screen.findByRole('heading', { name: 'Te faltan $ 590.000 el lunes 1 de junio' })).toBeInTheDocument();
+    expect(await screen.findByText('$ 1.900.000')).toBeInTheDocument();
   });
 
   it('sin red no se puede ingresar', async () => {
@@ -37,15 +37,29 @@ describe('LoginPage', () => {
 });
 
 describe('HomePage', () => {
-  it('responde la pregunta en el orden acordado', async () => {
+  it('datos primero: saldo, mínimo, gráfico, indicadores, acción, pagos, cobros y hoy', async () => {
     installFakeApi();
     renderApp('/');
-    expect(await screen.findByRole('heading', { name: 'Te faltan $ 590.000 el lunes 1 de junio' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Primer faltante')).toHaveTextContent('Si Hotel Brisas no paga: faltan $ 590.000 el viernes 29 de mayo');
-    expect(screen.getByLabelText('Qué hacer primero')).toHaveTextContent('Confirma el pago de Hotel Brisas');
-    expect(screen.getByRole('note')).toHaveTextContent('diferencia de $ 260.000');
-    expect(screen.getByRole('img', { name: /Saldo diario/ })).toBeInTheDocument();
-    expect(screen.getByText('Limpia Ya')).toBeInTheDocument();
+    expect(await screen.findByText('$ 1.900.000')).toBeInTheDocument();
+    expect(screen.getByText(/Mínimo 14 d −\$ 590 mil · lun 1 jun/)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Saldo de los próximos días/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('Entra $ 6.860.000')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Acción sugerida/ })).toHaveTextContent('Confirmar cobro · Hotel Brisas');
+    expect(screen.getByText('2/3 cubiertos')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Día por día ›' })).toBeInTheDocument();
+    expect(await screen.findByText('Sin registros hoy')).toBeInTheDocument();
+    // La fecha simulada del caso se distingue de la real.
+    expect(screen.getByText('Fecha del caso · lun 25 may')).toBeInTheDocument();
+  });
+
+  it('la acción sugerida abre el cobro y «Ya pagó» actualiza saldo y pagos', async () => {
+    const fake = installFakeApi();
+    const { user } = renderApp('/');
+    await user.click(await screen.findByRole('button', { name: /Acción sugerida/ }));
+    await user.click(await screen.findByRole('button', { name: 'Ya pagó · Registrar $ 2,1 M' }));
+    expect(await screen.findByText('$ 4.000.000')).toBeInTheDocument();
+    expect(fake.snapshot.receivables.find((r) => r.id === 'rcv_brisas')!.pendingAmount).toBe(0);
+    expect(await screen.findByText('Cobro Hotel Brisas')).toBeInTheDocument();
   });
 
   it('muestra el aviso persistente de alerta y permite marcarla', async () => {
@@ -66,29 +80,53 @@ describe('HomePage', () => {
     expect(await screen.findByText('$ 2.200.000')).toBeInTheDocument();
   });
 
-  it('registrar un gasto desde el FAB actualiza la proyección', async () => {
+  it('registrar un gasto desde el botón + actualiza saldo y «Hoy»', async () => {
     const fake = installFakeApi();
     const { user } = renderApp('/');
     await screen.findByText('$ 1.900.000');
-    await user.click(screen.getByRole('button', { name: 'Registrar ingreso o gasto' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
     await user.type(screen.getByLabelText('Monto (COP)'), '100000');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto $ 100 mil' }));
     await waitFor(() => expect(fake.writes()).toHaveLength(1));
     expect(await screen.findByText('$ 1.800.000')).toBeInTheDocument();
+    expect(await screen.findByText('Gasto')).toBeInTheDocument();
+  });
+});
+
+describe('Editar un ingreso o gasto', () => {
+  it('desde «Hoy»: corregir monto y luego eliminar con doble confirmación', async () => {
+    const fake = installFakeApi();
+    const { user } = renderApp('/');
+    await screen.findByText('$ 1.900.000');
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
+    await user.type(screen.getByLabelText('Monto (COP)'), '45000');
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto $ 45 mil' }));
+    await user.click(await screen.findByRole('button', { name: /Editar Gasto/ }));
+    const amount = screen.getAllByLabelText('Monto (COP)').at(-1)!;
+    await user.clear(amount);
+    await user.type(amount, '40000');
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(fake.writes().at(-1)!).toMatchObject({ method: 'PATCH', body: { baseVersion: 1, changes: { amount: 40_000 } } }));
+    expect(await screen.findByText('$ 1.860.000')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /Editar Gasto/ }));
+    await user.click(screen.getByRole('button', { name: 'Eliminar' }));
+    await user.click(screen.getByRole('button', { name: 'Sí, eliminar $ 40 mil' }));
+    await waitFor(() => expect(fake.writes().at(-1)!.method).toBe('DELETE'));
+    expect(await screen.findByText('$ 1.900.000')).toBeInTheDocument();
   });
 });
 
 describe('DetailPage', () => {
-  it('alterna escenario y explica la prueba de estrés', async () => {
+  it('tabla por día, escenario conservador y acciones que abren el cobro', async () => {
     installFakeApi();
     const { user } = renderApp('/detalle');
     await screen.findByRole('heading', { name: 'Día por día' });
     await user.click(screen.getByRole('button', { name: 'Conservador' }));
-    expect(screen.getByText(/Prueba de estrés: igual al esperado pero sin Cobro Hotel Brisas/)).toBeInTheDocument();
-    const friday = screen.getByRole('rowheader', { name: /viernes 29 de mayo/ }).closest('tr')!;
-    expect(within(friday).getByText('−$ 590.000')).toBeInTheDocument();
-    expect(screen.getByText('Cóbrale a Minimercado Sol')).toBeInTheDocument();
-    expect(screen.getByText(/No sumamos \$ 2.900.000/)).toBeInTheDocument();
+    expect(screen.getByText(/Sin Hotel Brisas \(−2,1 M\)/)).toBeInTheDocument();
+    const friday = screen.getByRole('button', { name: /vie 29 may/ }).closest('tr')!;
+    expect(within(friday).getByText('−$ 590 mil')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Confirma el pago de Hotel Brisas' }));
+    expect(await screen.findByRole('button', { name: 'Ya pagó · Registrar $ 2,1 M' })).toBeInTheDocument();
   });
 });
 
@@ -119,15 +157,6 @@ describe('RecordPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Guardar compromiso' })).toBeEnabled());
   });
 
-  it('el ingreso que es un cobro lleva al formulario de cobro', async () => {
-    installFakeApi();
-    const { user } = renderApp('/');
-    await screen.findByText('$ 1.900.000');
-    await user.click(screen.getByRole('button', { name: 'Registrar ingreso o gasto' }));
-    await user.click(screen.getByRole('button', { name: 'Ingreso' }));
-    await user.click(screen.getByRole('button', { name: 'Regístralo como cobro' }));
-    expect(await screen.findByLabelText('¿Quién te pagó?')).toBeInTheDocument();
-  });
 });
 
 describe('CommitmentsPage', () => {
@@ -144,9 +173,9 @@ describe('Cabeceras de la web', () => {
     const fake = installFakeApi();
     const { user } = renderApp('/');
     await screen.findByText('$ 1.900.000');
-    await user.click(screen.getByRole('button', { name: 'Registrar ingreso o gasto' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
     await user.type(screen.getByLabelText('Monto (COP)'), '1000');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto $ 1 mil' }));
     await waitFor(() => expect(fake.writes()).toHaveLength(1));
     const w = fake.writes()[0]!;
     expect(w.headers).toMatchObject({ 'x-client-platform': 'web', 'x-store-id': 'store_limpia_ya', 'x-csrf-token': 'csrf-test' });

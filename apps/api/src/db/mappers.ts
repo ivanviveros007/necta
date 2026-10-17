@@ -62,6 +62,7 @@ export const toReceivable = (d: Doc): ReceivableEntity => ({
   totalAmount: d.totalAmount,
   pendingAmount: d.pendingAmount,
   creditDueBy: d.creditDueBy ?? null,
+  originalDueBy: d.originalDueBy ?? null,
   dueHint: d.dueHint ?? null,
   payments: payments(d.payments),
 });

@@ -7,4 +7,5 @@ export { computeForecast, DEFAULT_HORIZON_DAYS } from './forecast';
 export * from './snapshot';
 export { applyPendingOperations, type PendingOperation } from './pending';
 export * from './fixtures/limpia-ya';
-export { summarizeForecast, paymentCoverage, formatDayShort, type HomeSummary, type UpcomingItem, type PaymentCoverage } from './summary';
+export { summarizeForecast, paymentCoverage, formatDayShort, businessDateCaption, type HomeSummary, type UpcomingItem, type PaymentCoverage } from './summary';
+export { todayActivity, type TodayActivity, type TodayItem, type TodayRecords } from './today';

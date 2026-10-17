@@ -1,6 +1,7 @@
 import type { AlertEntity } from '@necta/contracts';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
+import { Sheet, SheetHeader } from './collect';
 import { MovementForm } from './forms';
 
 export function OfflineBanner({ online }: { online: boolean }) {
@@ -34,56 +35,25 @@ export function AlertBanner({ alerts, onAcknowledge }: { alerts: AlertEntity[]; 
   );
 }
 
-/** Botón flotante + hoja inferior de ingreso o gasto. */
-export function QuickEntry({ online, businessDate, onIsCollection }: { online: boolean; businessDate: string; onIsCollection: () => void }) {
+/** Botón flotante + hoja inferior: gasto, ingreso o cobro. */
+export function QuickEntry({ online, businessDate }: { online: boolean; businessDate: string }) {
   const [open, setOpen] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const d = dialog.current;
-    if (!d) return;
-    if (open && !d.open) {
-      if (typeof d.showModal === 'function') d.showModal();
-      else d.setAttribute('open', '');
-    }
-    if (!open && d.open) {
-      if (typeof d.close === 'function') d.close();
-      else d.removeAttribute('open');
-    }
-  }, [open]);
-
   return (
     <>
-      <button type="button" className="fab" aria-label="Registrar ingreso o gasto" onClick={() => setOpen(true)}>
+      <button type="button" className="fab" aria-label="Registrar" onClick={() => setOpen(true)}>
         +
       </button>
-      <dialog ref={dialog} className="sheet" aria-label="Registrar ingreso o gasto" onClose={() => setOpen(false)}>
-        {open && (
-          <>
-            <div className="sheet-header">
-              <h2>Registrar</h2>
-              <button type="button" className="link" onClick={() => setOpen(false)}>
-                Cerrar
-              </button>
-            </div>
-            <MovementForm
-              online={online}
-              businessDate={businessDate}
-              onDone={() => setOpen(false)}
-              onIsCollection={() => {
-                setOpen(false);
-                onIsCollection();
-              }}
-            />
-          </>
-        )}
-      </dialog>
+      <Sheet open={open} onClose={() => setOpen(false)} label="Registrar">
+        <SheetHeader title="Registrar" onClose={() => setOpen(false)} />
+        <MovementForm online={online} businessDate={businessDate} onDone={() => setOpen(false)} />
+      </Sheet>
     </>
   );
 }
 
 export function AppShell({
   storeName,
+  dateBadge,
   userName,
   onLogout,
   banners,
@@ -91,6 +61,8 @@ export function AppShell({
   fab,
 }: {
   storeName: string;
+  /** Marca visible cuando la fecha de negocio es simulada (demo del caso). */
+  dateBadge?: string;
   userName: string;
   onLogout: () => void;
   banners: ReactNode;
@@ -103,6 +75,11 @@ export function AppShell({
         <div>
           <strong>{storeName}</strong>
           <span className="muted"> · {userName}</span>
+          {dateBadge ? (
+            <span className="date-badge" title="La API usa una fecha fija para reproducir el caso">
+              {dateBadge}
+            </span>
+          ) : null}
         </div>
         <nav aria-label="Secciones">
           <NavLink to="/" end>

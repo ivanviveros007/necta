@@ -38,16 +38,28 @@ export function createApiClient(baseUrl: string, fetchImpl: Fetch = fetch, timeo
     if (opts.token) headers.authorization = `Bearer ${opts.token}`;
     if (opts.storeId) headers['x-store-id'] = opts.storeId;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // En iOS una petición puede quedar esperando la red aunque se aborte: la carrera garantiza que
+    // la promesa siempre termina y el coordinador nunca queda trabado.
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new ApiError(0, 'TIMEOUT', 'La API no respondió a tiempo'));
+      }, timeoutMs);
+    });
     let res: Response;
     try {
-      res = await fetchImpl(`${baseUrl}${path}`, {
-        method,
-        headers,
-        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-        signal: controller.signal,
-      });
+      res = await Promise.race([
+        fetchImpl(`${baseUrl}${path}`, {
+          method,
+          headers,
+          body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+          signal: controller.signal,
+        }),
+        timeout,
+      ]);
     } catch (error) {
+      if (error instanceof ApiError) throw error;
       const aborted = (error as { name?: string })?.name === 'AbortError';
       throw new ApiError(0, aborted ? 'TIMEOUT' : 'NETWORK_ERROR', aborted ? 'La API no respondió a tiempo' : 'Sin conexión con la API');
     } finally {

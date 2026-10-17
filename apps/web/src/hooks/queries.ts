@@ -12,6 +12,7 @@ export const keys = {
   movements: ['movements'] as const,
   commitments: ['commitments'] as const,
   alerts: ['alerts'] as const,
+  today: ['today'] as const,
 };
 
 export const useForecast = () => useQuery({ queryKey: keys.forecast, queryFn: api.forecast });
@@ -22,6 +23,22 @@ export const usePayables = () => useQuery({ queryKey: keys.payables, queryFn: ap
 export const useMovements = () => useQuery({ queryKey: keys.movements, queryFn: api.movements });
 export const useCommitments = () => useQuery({ queryKey: keys.commitments, queryFn: api.commitments });
 export const useAlerts = () => useQuery({ queryKey: keys.alerts, queryFn: api.alerts });
+
+/** Datos para la sección «Hoy»: movimientos, ventas, cobros/pagos con fecha de hoy y base habitual. */
+export const useTodayData = (businessDate: string) =>
+  useQuery({
+    queryKey: [...keys.today, businessDate],
+    queryFn: async () => {
+      const [movements, sales, receivables, payables, baseline] = await Promise.all([
+        api.movements(),
+        api.sales(businessDate),
+        api.allReceivables(),
+        api.allPayables(),
+        api.baseline(),
+      ]);
+      return { movements, sales, receivables, payables, baseline };
+    },
+  });
 
 const newId = () => `web_${crypto.randomUUID()}`;
 

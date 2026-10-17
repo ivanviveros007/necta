@@ -278,3 +278,12 @@ describe('Inicio del día local', () => {
     expect(startOfLocalDay('2026-01-15', 'America/Santiago')).toBe('2026-01-15T03:00:00.000Z');
   });
 });
+
+describe('Reprogramar un cobro', () => {
+  it('mover el cobro de Brisas al martes 2 adelanta el faltante al viernes 29', () => {
+    const after = applyPendingOperations(limpiaYaSnapshot(), [{ type: 'receivable.reschedule', entityId: 'rcv_brisas', payload: { newDueDate: '2026-06-02' } }]);
+    const r = computeForecast(buildForecastInput(after));
+    expect(r.scheduledReceivables.find((s) => s.receivableId === 'rcv_brisas')!.date).toBe('2026-06-02');
+    expect(r.scenarios.expected.firstShortfall).toMatchObject({ date: '2026-05-29', amount: 590_000 });
+  });
+});

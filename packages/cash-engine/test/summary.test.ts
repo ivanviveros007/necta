@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildForecastInput, computeForecast, formatMoneyCompact, limpiaYaSnapshot, summarizeForecast, type ForecastInput } from '../src';
+import { buildForecastInput, businessDateCaption, computeForecast, formatMoneyCompact, limpiaYaSnapshot, summarizeForecast, type ForecastInput } from '../src';
 
 const caseSummary = () => summarizeForecast(computeForecast(buildForecastInput(limpiaYaSnapshot())));
 
@@ -32,7 +32,7 @@ describe('Resumen de la home', () => {
   });
 
   it('acción principal', () => {
-    expect(caseSummary().primaryAction).toEqual({ title: 'Confirma el pago de Hotel Brisas', kind: 'confirm_collection', target: 'Hotel Brisas', amount: 2_100_000, postponeDays: null });
+    expect(caseSummary().primaryAction).toEqual({ title: 'Confirma el pago de Hotel Brisas', kind: 'confirm_collection', target: 'Hotel Brisas', amount: 2_100_000, postponeDays: null, sourceId: 'rcv_brisas' });
     expect(caseSummary().minBalance).toEqual({ date: '2026-06-01', amount: -590_000 });
   });
 
@@ -94,5 +94,12 @@ describe('Formato compacto', () => {
     expect(formatMoneyCompact(590_000)).toBe('$ 590 mil');
     expect(formatMoneyCompact(-2_690_000)).toBe('−$ 2,69 M');
     expect(formatMoneyCompact(400)).toBe('$ 400');
+  });
+});
+
+describe('Fecha de negocio', () => {
+  it('distingue la fecha simulada del caso de la real', () => {
+    expect(businessDateCaption('2026-05-25', true)).toBe('Fecha del caso · lun 25 may');
+    expect(businessDateCaption('2026-10-17', false)).toBe('Hoy · sáb 17 oct');
   });
 });

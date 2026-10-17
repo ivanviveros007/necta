@@ -36,8 +36,19 @@ export function createExpoPlatform(): Platform {
     onServerChange(token, cb) {
       // Solo avisa: el pull por cursor sigue siendo la fuente de verdad.
       const socket = io(apiUrl, { path: '/socket.io', transports: ['websocket'], auth: { token } });
-      socket.on('store.changed', cb);
-      socket.on('connect', cb);
+      socket.on('store.changed', (e) => {
+        if (__DEV__) console.log('[socket] store.changed', JSON.stringify(e));
+        cb();
+      });
+      socket.on('connect', () => {
+        if (__DEV__) console.log('[socket] conectado');
+        cb();
+      });
+      if (__DEV__) {
+        socket.on('connect_error', (err) => console.log('[socket] error de conexión', err.message));
+        socket.on('disconnect', (reason) => console.log('[socket] desconectado', reason));
+        socket.on('unauthorized', () => console.log('[socket] no autorizado'));
+      }
       return () => {
         socket.removeAllListeners();
         socket.close();

@@ -51,23 +51,23 @@ describe('AlertBanner', () => {
   });
 });
 
-describe('QuickEntry (FAB + hoja inferior)', () => {
+describe('QuickEntry (botón + y hoja inferior)', () => {
   beforeEach(() => {
     installFakeApi();
     clearAllDrafts();
   });
 
-  it('abre el formulario de ingreso/gasto y lo cierra al guardar', async () => {
+  it('abre el registro rápido y lo cierra al guardar', async () => {
     const user = userEvent.setup();
     render(
       <QueryClientProvider client={testClient()}>
-        <QuickEntry online businessDate="2026-05-25" onIsCollection={() => undefined} />
+        <QuickEntry online businessDate="2026-05-25" />
       </QueryClientProvider>,
     );
     expect(screen.queryByLabelText('Monto (COP)')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Registrar ingreso o gasto' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
     await user.type(screen.getByLabelText('Monto (COP)'), '45000');
-    await user.click(screen.getByRole('button', { name: 'Guardar' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar gasto $ 45 mil' }));
     await vi.waitFor(() => expect(screen.queryByLabelText('Monto (COP)')).not.toBeInTheDocument());
   });
 
@@ -75,10 +75,10 @@ describe('QuickEntry (FAB + hoja inferior)', () => {
     const user = userEvent.setup();
     render(
       <QueryClientProvider client={testClient()}>
-        <QuickEntry online businessDate="2026-05-25" onIsCollection={() => undefined} />
+        <QuickEntry online businessDate="2026-05-25" />
       </QueryClientProvider>,
     );
-    await user.click(screen.getByRole('button', { name: 'Registrar ingreso o gasto' }));
+    await user.click(screen.getByRole('button', { name: 'Registrar' }));
     await user.click(screen.getByRole('button', { name: 'Cerrar' }));
     expect(screen.queryByLabelText('Monto (COP)')).not.toBeInTheDocument();
   });

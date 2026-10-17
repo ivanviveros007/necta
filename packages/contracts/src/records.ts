@@ -132,6 +132,12 @@ export const BaselineUpdateRequestSchema = z.object({
   baseline: BaselineInputSchema,
 });
 
+export const RescheduleRequestSchema = z.object({
+  clientMutationId: ClientMutationIdSchema,
+  baseVersion: z.number().int().min(1),
+  newDueDate: LocalDateSchema,
+});
+
 export const BankAdjustmentRequestSchema = z.object({
   clientMutationId: ClientMutationIdSchema,
   newBalance: z.number().int(),
@@ -179,6 +185,8 @@ export const ReceivableEntitySchema = SyncMetaSchema.extend({
   totalAmount: z.number().int(),
   pendingAmount: z.number().int(),
   creditDueBy: LocalDateSchema.nullable(),
+  /** Vencimiento original si se reprogramó (extensión). */
+  originalDueBy: LocalDateSchema.nullable().default(null),
   dueHint: z.string().nullable(),
   payments: z.array(DebtPaymentEntitySchema),
 });
@@ -224,6 +232,8 @@ export const StoreInfoSchema = z.object({
   currency: z.string(),
   timeZone: z.string(),
   businessDate: LocalDateSchema,
+  /** true si la fecha de negocio es fija (demo/caso), no la fecha real de la tienda. */
+  businessDateSimulated: z.boolean().default(false),
   todayPolicy: z.enum(['fullDay', 'none']),
 });
 export type StoreInfo = z.infer<typeof StoreInfoSchema>;

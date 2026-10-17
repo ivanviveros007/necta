@@ -37,6 +37,8 @@ export const SyncOperationSchema = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('sale.create'), payload: z.object({ sale: SaleSchema.extend({ id: IdSchema }) }) }),
   z.object({ ...base, entityId: IdSchema, type: z.literal('receivable.payment'), payload: debtPayment }),
   z.object({ ...base, entityId: IdSchema, type: z.literal('payable.payment'), payload: debtPayment }),
+  // Extensión: la clienta avisó que paga otro día. Cambia el vencimiento; la puntualidad se mide contra el original.
+  z.object({ ...versioned, type: z.literal('receivable.reschedule'), payload: z.object({ newDueDate: LocalDateSchema }) }),
   z.object({ ...base, type: z.literal('commitment.create'), payload: z.object({ commitment: CommitmentInputSchema }) }),
   z.object({ ...versioned, type: z.literal('commitment.update'), payload: z.object({ changes: CommitmentChangesSchema }) }),
   z.object({ ...versioned, type: z.literal('commitment.delete'), payload: z.object({}).default({}) }),

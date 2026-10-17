@@ -1,3 +1,4 @@
+import { localDateInZone } from '@necta/cash-engine';
 import type { SessionUser, StoreInfo } from '@necta/contracts';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -28,6 +29,8 @@ interface NectaContextValue {
   store: StoreInfo | null;
   /** Hay sesión local pero el token venció: se registra igual, sin sincronizar. */
   expired: boolean;
+  /** La fecha de negocio es simulada (demo del caso), no la fecha real de la tienda. */
+  simulatedDate: boolean;
   repo: LocalRepository | null;
   sync: SyncState | null;
   login(email: string, password: string): Promise<void>;
@@ -148,6 +151,7 @@ export function NectaProvider({ platform, children }: { platform: Platform; chil
       user: session?.user ?? null,
       store: session?.store ?? null,
       expired: session ? isExpired(session) : false,
+      simulatedDate: session ? isSimulatedDate(session.store) : false,
       repo,
       sync,
       login,
@@ -159,6 +163,12 @@ export function NectaProvider({ platform, children }: { platform: Platform; chil
     [status, session, repo, sync, login, logout, record, syncNow, platform],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Sesiones guardadas antes de existir el indicador: se deduce comparando con la fecha real local. */
+export function isSimulatedDate(store: StoreInfo, now: Date = new Date()): boolean {
+  if (typeof store.businessDateSimulated === 'boolean') return store.businessDateSimulated;
+  return store.businessDate !== localDateInZone(now, store.timeZone);
 }
 
 export function useNecta(): NectaContextValue {

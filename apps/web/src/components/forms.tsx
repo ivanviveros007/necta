@@ -1,9 +1,12 @@
-import { formatMoney } from '@necta/cash-engine';
-import { useId, type FormEvent, type ReactNode } from 'react';
+import { formatDayShort, formatMoney, formatMoneyCompact } from '@necta/cash-engine';
+import type { ReceivableEntity } from '@necta/contracts';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { errorMessage } from '../api/client';
 import { api } from '../api/endpoints';
 import { useDraft } from '../hooks/useDraft';
 import { useBanks, useCounterparties, useMutationId, usePayables, useReceivables, useRecord } from '../hooks/queries';
+import { useDateCaption } from '../session/businessDate';
+import { AmountInput, BankChips, CollectPanel, DateField, ReceivablePicker } from './collect';
 
 /** «45.000» → 45000. Solo dígitos: montos enteros en COP. */
 export function parseAmount(text: string): number {
@@ -47,7 +50,7 @@ function BankField({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-function SubmitBar({ online, pending, label, error, success }: { online: boolean; pending: boolean; label: string; error: unknown; success: string | null }) {
+function SubmitBar({ online, pending, label, error, success, disabled }: { online: boolean; pending: boolean; label: string; error: unknown; success: string | null; disabled?: boolean }) {
   return (
     <div className="submit">
       {!online && (
@@ -65,7 +68,7 @@ function SubmitBar({ online, pending, label, error, success }: { online: boolean
           {success}
         </p>
       )}
-      <button type="submit" className="primary" disabled={!online || pending}>
+      <button type="submit" className="primary" disabled={!online || pending || disabled}>
         {pending ? 'Guardando…' : label}
       </button>
     </div>
@@ -78,17 +81,20 @@ interface FormProps {
   onDone?: () => void;
 }
 
-// ---------- Ingreso / gasto ----------
+// ---------- Registro rápido: gasto, ingreso o cobro ----------
 
-export function MovementForm({ online, businessDate, onDone, onIsCollection }: FormProps & { onIsCollection?: () => void }) {
-  const init = () => ({ kind: 'expense' as 'income' | 'expense', amount: '', bankId: 'bank_caja', description: '', date: businessDate });
+export function MovementForm({ online, businessDate, onDone }: FormProps) {
+  const dateCaption = useDateCaption(businessDate);
+  const [kind, setKind] = useState<'expense' | 'income' | 'collect'>('expense');
+  const [receivable, setReceivable] = useState<ReceivableEntity | null>(null);
+  const init = () => ({ amount: 0, bankId: 'bank_caja', description: '', date: businessDate });
   const [form, setForm, clear] = useDraft('movement', init);
   const [mutationId, renew] = useMutationId();
   const mutation = useRecord(() =>
     api.createMovement(mutationId, {
       id: `mv_${mutationId}`,
-      kind: form.kind,
-      amount: parseAmount(form.amount),
+      kind: kind === 'income' ? 'income' : 'expense',
+      amount: form.amount,
       bankId: form.bankId,
       date: form.date,
       description: form.description,
@@ -97,7 +103,7 @@ export function MovementForm({ online, businessDate, onDone, onIsCollection }: F
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (parseAmount(form.amount) <= 0) return;
+    if (form.amount <= 0) return;
     mutation.mutate(undefined, {
       onSuccess: () => {
         clear();
@@ -108,32 +114,61 @@ export function MovementForm({ online, businessDate, onDone, onIsCollection }: F
   };
 
   return (
-    <form onSubmit={submit} aria-label="Ingreso o gasto">
+    <div>
       <div className="toggle" role="group" aria-label="Tipo">
-        <button type="button" aria-pressed={form.kind === 'income'} onClick={() => setForm((f) => ({ ...f, kind: 'income' }))}>
-          Ingreso
-        </button>
-        <button type="button" aria-pressed={form.kind === 'expense'} onClick={() => setForm((f) => ({ ...f, kind: 'expense' }))}>
-          Gasto
-        </button>
-      </div>
-      {form.kind === 'income' && onIsCollection && (
-        <p>
-          ¿Es el pago de una clienta que te debía?{' '}
-          <button type="button" className="link" onClick={onIsCollection}>
-            Regístralo como cobro
+        {(
+          [
+            ['expense', '− Gasto'],
+            ['income', '+ Ingreso'],
+            ['collect', 'Cobro'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={kind === k}
+            onClick={() => {
+              setKind(k);
+              setReceivable(null);
+            }}
+          >
+            {label}
           </button>
-          , así no se cuenta dos veces.
-        </p>
+        ))}
+      </div>
+      {kind === 'collect' ? (
+        receivable ? (
+          <div>
+            <div className="sheet-header">
+              <strong>{receivable.counterpartyName}</strong>
+              <button type="button" className="link" onClick={() => setReceivable(null)}>
+                Cambiar
+              </button>
+            </div>
+            <CollectPanel receivable={receivable} businessDate={businessDate} online={online} onDone={() => onDone?.()} />
+          </div>
+        ) : (
+          <ReceivablePicker onPick={setReceivable} />
+        )
+      ) : (
+        <form onSubmit={submit} aria-label={kind === 'income' ? 'Ingreso' : 'Gasto'}>
+          <AmountInput value={form.amount} onChange={(amount) => setForm((f) => ({ ...f, amount }))} sign={kind === 'income' ? '+' : '−'} tone={kind === 'income' ? 'pos' : 'neg'} />
+          <DateField value={form.date} onChange={(date) => setForm((f) => ({ ...f, date }))} businessDate={businessDate} caption={dateCaption} />
+          <BankChips value={form.bankId} onChange={(bankId) => setForm((f) => ({ ...f, bankId }))} />
+          <Field label="Descripción (opcional)">
+            {(id) => <input id={id} value={form.description} placeholder={kind === 'income' ? 'Venta del mercado…' : 'Transporte, bolsas…'} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}
+          </Field>
+          <SubmitBar
+            online={online}
+            pending={mutation.isPending}
+            label={form.amount > 0 ? `Guardar ${kind === 'income' ? 'ingreso' : 'gasto'} ${formatMoneyCompact(form.amount)}` : 'Escribe el monto'}
+            error={mutation.error}
+            success={null}
+            disabled={form.amount <= 0}
+          />
+        </form>
       )}
-      <AmountField value={form.amount} onChange={(amount) => setForm((f) => ({ ...f, amount }))} />
-      <BankField value={form.bankId} onChange={(bankId) => setForm((f) => ({ ...f, bankId }))} />
-      <Field label="Descripción">{(id) => <input id={id} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />}</Field>
-      <Field label="Fecha" hint="Un movimiento ya hecho no puede tener fecha futura.">
-        {(id) => <input id={id} type="date" max={businessDate} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />}
-      </Field>
-      <SubmitBar online={online} pending={mutation.isPending} label="Guardar" error={mutation.error} success={mutation.isSuccess ? 'Guardado.' : null} />
-    </form>
+    </div>
   );
 }
 

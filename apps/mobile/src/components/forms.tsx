@@ -1,7 +1,8 @@
-import { formatDayShort, formatMoney, type StoreSnapshot } from '@necta/cash-engine';
+import { formatDayShort, formatMoney, formatMoneyCompact, type SnapshotReceivable, type StoreSnapshot } from '@necta/cash-engine';
 import { Host, Picker } from '@expo/ui';
 import { useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { AmountInput, CollectPanel, DateField, ReceivablePicker } from './collect';
 import { commitmentCreate, debtPayment, movementCreate, saleCreate, type Draft } from '../domain/operations';
 import { Body, Button, colors, Field, Notice, Segmented, styles } from './ui';
 
@@ -14,6 +15,8 @@ export function parseAmount(text: string): number {
 export interface FormProps {
   snapshot: StoreSnapshot;
   businessDate: string;
+  /** «Hoy · …» o «Fecha del caso · …» si la fecha de negocio es simulada. */
+  dateCaption?: string;
   newId: () => string;
   /** Guarda localmente (SQLite + outbox). Funciona sin señal. */
   onSubmit: (draft: Draft) => Promise<void>;
@@ -61,18 +64,19 @@ function useSubmit(onSubmit: FormProps['onSubmit'], onDone?: () => void) {
 const bankOptions = (s: StoreSnapshot) => s.banks.filter((b) => !b.deletedAt).map((b) => ({ value: b.id, label: b.name }));
 
 /**
- * Registro rápido de ingreso o gasto (hoja del botón +): monto grande, bolsillo con botones,
- * todo al alcance del pulgar. Se guarda en el teléfono aunque no haya señal.
+ * Registro rápido (hoja del botón +): gasto, ingreso o cobro de una deuda. Monto grande, bolsillo con
+ * botones, todo al alcance del pulgar. Se guarda en el teléfono aunque no haya señal.
  */
-export function MovementForm({ snapshot, businessDate, newId, onSubmit, onDone, onIsCollection, onClose }: FormProps & { onIsCollection?: () => void; onClose?: () => void }) {
-  const [kind, setKind] = useState<'income' | 'expense'>('expense');
-  const [amount, setAmount] = useState('');
+export function MovementForm({ snapshot, businessDate, dateCaption, newId, onSubmit, onDone, onClose, creatorOf }: FormProps & { onClose?: () => void }) {
+  const [kind, setKind] = useState<'expense' | 'income' | 'collect'>('expense');
+  const [receivable, setReceivable] = useState<SnapshotReceivable | null>(null);
+  const [amount, setAmount] = useState(0);
   const banks = snapshot.banks.filter((b) => !b.deletedAt);
   const [bankId, setBankId] = useState(banks[0]?.id ?? '');
   const [description, setDescription] = useState('');
+  const [date, setDate] = useState(businessDate);
   const { error, saved, submit } = useSubmit(onSubmit, onDone);
-  const value = parseAmount(amount);
-  const tone = kind === 'income' ? colors.ok : colors.bad;
+  const ctx = { snapshot, businessDate, dateCaption, newId, onSubmit, creatorOf, onDone };
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -81,41 +85,51 @@ export function MovementForm({ snapshot, businessDate, newId, onSubmit, onDone, 
         </Text>
         {onClose ? <Button variant="link" label="Cerrar" onPress={onClose} /> : null}
       </View>
-      <Segmented label="Tipo" value={kind} onChange={setKind} options={[{ value: 'expense', label: '− Gasto' }, { value: 'income', label: '+ Ingreso' }]} />
-      <View style={{ alignItems: 'center', marginVertical: 16 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 40, fontWeight: '800', color: tone }}>{kind === 'income' ? '+' : '−'} $</Text>
-          <TextInput
-            accessibilityLabel="Monto (COP)"
-            keyboardType="number-pad"
-            placeholder="0"
-            placeholderTextColor="#9A9A9A"
-            value={value > 0 ? formatMoney(value).replace('$ ', '') : ''}
-            onChangeText={setAmount}
-            style={{ fontSize: 44, fontWeight: '800', color: colors.ink, minWidth: 140, paddingHorizontal: 6, fontVariant: ['tabular-nums'] }}
+      <Segmented
+        label="Tipo"
+        value={kind}
+        onChange={(k) => {
+          setKind(k);
+          setReceivable(null);
+        }}
+        options={[
+          { value: 'expense', label: '− Gasto' },
+          { value: 'income', label: '+ Ingreso' },
+          { value: 'collect', label: 'Cobro' },
+        ]}
+      />
+      {kind === 'collect' ? (
+        receivable ? (
+          <View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: colors.ink }}>{receivable.counterpartyName}</Text>
+              <Button variant="link" label="Cambiar" onPress={() => setReceivable(null)} />
+            </View>
+            <CollectPanel receivable={receivable} ctx={ctx} />
+          </View>
+        ) : (
+          <ReceivablePicker snapshot={snapshot} onPick={setReceivable} />
+        )
+      ) : (
+        <View>
+          <AmountInput value={amount} onChange={setAmount} sign={kind === 'income' ? '+' : '−'} tone={kind === 'income' ? colors.ok : colors.bad} />
+          <DateField value={date} onChange={setDate} snapshot={snapshot} businessDate={businessDate} caption={dateCaption} />
+          {banks.length > 1 ? <Segmented label="Bolsillo" value={bankId} onChange={setBankId} options={banks.map((b) => ({ value: b.id, label: b.name }))} /> : null}
+          <Field label="Descripción (opcional)" value={description} onChangeText={setDescription} placeholder={kind === 'income' ? 'Venta del mercado…' : 'Transporte, bolsas…'} />
+          {error ? <Notice tone="bad">{error}</Notice> : null}
+          {saved ? <Notice tone="ok">Guardado en el teléfono.</Notice> : null}
+          <Button
+            label={amount > 0 ? `Guardar ${kind === 'income' ? 'ingreso' : 'gasto'} ${formatMoneyCompact(amount)}` : 'Escribe el monto'}
+            disabled={amount <= 0 || !bankId}
+            onPress={() =>
+              void submit(movementCreate(newId, { kind: kind === 'income' ? 'income' : 'expense', amount, bankId, date, description }), () => {
+                setAmount(0);
+                setDescription('');
+              })
+            }
           />
         </View>
-        <Text style={{ fontSize: 15, color: colors.muted }}>Hoy · {formatDayShort(businessDate)}</Text>
-      </View>
-      {banks.length > 1 ? (
-        <Segmented label="Bolsillo" value={bankId} onChange={setBankId} options={banks.map((b) => ({ value: b.id, label: b.name }))} />
-      ) : null}
-      <Field label="Descripción (opcional)" value={description} onChangeText={setDescription} placeholder={kind === 'income' ? 'Venta del mercado…' : 'Transporte, bolsas…'} />
-      {kind === 'income' && onIsCollection ? (
-        <Button variant="link" label="¿Es el pago de una clienta que te debía? Regístralo como cobro" onPress={onIsCollection} />
-      ) : null}
-      {error ? <Notice tone="bad">{error}</Notice> : null}
-      {saved ? <Notice tone="ok">Guardado en el teléfono.</Notice> : null}
-      <Button
-        label={value > 0 ? `Guardar ${kind === 'income' ? 'ingreso' : 'gasto'} de ${formatMoney(value)}` : 'Escribe el monto'}
-        disabled={value <= 0 || !bankId}
-        onPress={() =>
-          void submit(movementCreate(newId, { kind, amount: value, bankId, date: businessDate, description }), () => {
-            setAmount('');
-            setDescription('');
-          })
-        }
-      />
+      )}
     </View>
   );
 }

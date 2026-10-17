@@ -16,6 +16,8 @@ export interface UpcomingItem {
   /** Con signo: + entra, − sale. */
   amount: number;
   kind: 'receivable' | 'payable' | 'commitment';
+  /** Id de la cuenta o compromiso de origen (para actuar sobre él). */
+  sourceId: string | null;
 }
 
 export interface PaymentCoverage {
@@ -43,7 +45,7 @@ export interface HomeSummary {
   balanceDelta: number | null;
   totals: { inflow: number; outflow: number; unscheduled: number };
   upcoming: UpcomingItem[];
-  primaryAction: { title: string; kind: string; target: string; amount: number; postponeDays: number | null } | null;
+  primaryAction: { title: string; kind: string; target: string; amount: number; postponeDays: number | null; sourceId: string | null } | null;
   minBalance: { date: LocalDate; amount: number };
 }
 
@@ -80,6 +82,7 @@ export function summarizeForecast(f: ForecastResult, upcomingLimit = 5): HomeSum
           label: fl.label,
           amount: fl.direction === 'inflow' ? fl.amount : -fl.amount,
           kind: fl.kind as UpcomingItem['kind'],
+          sourceId: fl.sourceId,
         })),
     )
     .slice(0, upcomingLimit);
@@ -122,7 +125,7 @@ export function summarizeForecast(f: ForecastResult, upcomingLimit = 5): HomeSum
       unscheduled: sum(f.unscheduledReceivables.filter((u) => u.reason !== 'due_after_window').map((u) => u.pendingAmount)),
     },
     upcoming,
-    primaryAction: action ? { title: action.title, kind: action.kind, target: action.target, amount: action.amount, postponeDays: action.postponeDays ?? null } : null,
+    primaryAction: action ? { title: action.title, kind: action.kind, target: action.target, amount: action.amount, postponeDays: action.postponeDays ?? null, sourceId: action.sourceId } : null,
     minBalance: expected.minBalance,
   };
 }
@@ -149,4 +152,9 @@ export function paymentCoverage(f: ForecastResult): PaymentCoverage[] {
     result.push(...items.sort((a, b) => a.label.localeCompare(b.label)));
   }
   return result;
+}
+
+/** «Hoy · lun 25 may» o, si la fecha de negocio es simulada (demo del caso), «Fecha del caso · lun 25 may». */
+export function businessDateCaption(date: LocalDate, simulated: boolean): string {
+  return `${simulated ? 'Fecha del caso' : 'Hoy'} · ${formatDayShort(date)}`;
 }

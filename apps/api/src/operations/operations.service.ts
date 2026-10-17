@@ -213,6 +213,7 @@ export class OperationsService {
       'sale.create': this.createSale,
       'receivable.payment': this.receivablePayment,
       'payable.payment': this.payablePayment,
+      'receivable.reschedule': this.rescheduleReceivable,
       'commitment.create': this.createCommitment,
       'commitment.update': this.updateCommitment,
       'commitment.delete': this.deleteCommitment,
@@ -379,12 +380,14 @@ export class OperationsService {
 
   private receivablePayment: Handler<'receivable.payment'> = async (ctx, op, seq, s) => {
     const updated = await this.debtPayment(this.receivables, 'receivable', ctx, op, seq, s);
-    if (updated.counterpartyId && updated.creditDueBy) {
+    // La puntualidad se mide contra el vencimiento original, aunque se haya reprogramado.
+    const dueForHistory = updated.originalDueBy ?? updated.creditDueBy;
+    if (updated.counterpartyId && dueForHistory) {
       // Puntualidad incremental: cada pago cuenta; a tiempo si llega en o antes del vencimiento.
       const cp = await this.counterparties.findOne({ _id: updated.counterpartyId, storeId: ctx.storeId }).session(s).lean<Doc>();
       if (cp) {
         const h = cp.history ?? { payments: 0, onTime: 0, avgDaysLate: null };
-        const daysLate = daysBetween(updated.creditDueBy, op.payload.paymentDate);
+        const daysLate = daysBetween(dueForHistory, op.payload.paymentDate);
         const late = daysLate > 0;
         const lateBefore = h.payments - h.onTime;
         const avgDaysLate = late ? ((h.avgDaysLate ?? 0) * lateBefore + daysLate) / (lateBefore + 1) : h.avgDaysLate;
@@ -395,6 +398,24 @@ export class OperationsService {
         );
       }
     }
+    return { entityType: 'receivable', entity: MAPPERS.receivable(updated) };
+  };
+
+  private rescheduleReceivable: Handler<'receivable.reschedule'> = async (ctx, op, seq, s) => {
+    const current = await this.loadVersioned(this.receivables, 'receivable', ctx, op.entityId, op.baseVersion, s);
+    if (current.pendingAmount <= 0) throw new BusinessError('DEBT_ALREADY_SETTLED', 'Esta cuenta ya está pagada');
+    if (op.payload.newDueDate < this.clock.businessDate(ctx.timeZone)) {
+      throw new BusinessError('VALIDATION_ERROR', 'La nueva fecha no puede ser anterior a hoy');
+    }
+    const updated = await this.conditionalUpdate(
+      this.receivables,
+      'receivable',
+      ctx,
+      op.entityId,
+      op.baseVersion,
+      { $set: { creditDueBy: op.payload.newDueDate, originalDueBy: current.originalDueBy ?? current.creditDueBy, ...this.stamp(seq) } },
+      s,
+    );
     return { entityType: 'receivable', entity: MAPPERS.receivable(updated) };
   };
 

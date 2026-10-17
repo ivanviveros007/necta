@@ -55,6 +55,7 @@ const TYPE_TEXT: Record<OutboxItem['type'], string> = {
   'sale.create': 'Venta',
   'receivable.payment': 'Cobro',
   'payable.payment': 'Pago',
+  'receivable.reschedule': 'Nueva fecha de cobro',
   'commitment.create': 'Pago fijo o futuro',
   'commitment.update': 'Edición de pago fijo',
   'commitment.delete': 'Borrado de pago fijo',
@@ -98,27 +99,32 @@ function pick(entity: Record<string, unknown>) {
   return Object.fromEntries(Object.entries({ concept, amount, description, version }).filter(([, v]) => v !== undefined));
 }
 
-/** Botón flotante al alcance del pulgar + hoja inferior nativa (Expo UI BottomSheet). */
-export function QuickEntry({ open, onOpen, onClose, children }: { open: boolean; onOpen: () => void; onClose: () => void; children: ReactNode }) {
+/** Botón flotante al alcance del pulgar. */
+export function Fab({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Registrar"
+      onPress={onPress}
+      style={{ position: 'absolute', right: 20, bottom: 32, width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
+    >
+      <Text style={{ color: colors.paper, fontSize: 40, lineHeight: 44 }}>+</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Hoja inferior nativa (Expo UI). Sin snapPoints se ajusta al contenido. RNHostView vuelve el
+ * contenido vista de React Native (si no, los Host internos quedarían anidados dentro de SwiftUI).
+ */
+export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
   const { width } = useWindowDimensions();
   return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Registrar ingreso o gasto"
-        onPress={onOpen}
-        style={{ position: 'absolute', right: 20, bottom: 32, width: 72, height: 72, borderRadius: 36, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
-      >
-        <Text style={{ color: colors.paper, fontSize: 40, lineHeight: 44 }}>+</Text>
-      </Pressable>
-      {/* Sin snapPoints: la hoja se ajusta al contenido. RNHostView vuelve el contenido vista de
-          React Native (si no, los Host internos quedarían anidados dentro de SwiftUI). */}
-      <BottomSheet isPresented={open} onDismiss={onClose} contentPadding={0}>
-        <RNHostView matchContents>
-          <View style={{ width, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, backgroundColor: colors.paper }}>{open ? children : null}</View>
-        </RNHostView>
-      </BottomSheet>
-    </>
+    <BottomSheet isPresented={open} onDismiss={onClose} contentPadding={0}>
+      <RNHostView matchContents>
+        <View style={{ width, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 28, backgroundColor: colors.paper }}>{open ? children : null}</View>
+      </RNHostView>
+    </BottomSheet>
   );
 }
 

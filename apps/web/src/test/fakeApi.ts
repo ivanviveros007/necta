@@ -12,7 +12,7 @@ import type { Socket } from 'socket.io-client';
 
 export const SESSION: SessionResponse = {
   user: { id: 'usr_carmen', email: 'carmen@limpiaya.test', name: 'Carmen Ortiz' },
-  stores: [{ id: 'store_limpia_ya', name: 'Limpia Ya', currency: 'COP', timeZone: 'America/Bogota', businessDate: '2026-05-25', todayPolicy: 'fullDay' }],
+  stores: [{ id: 'store_limpia_ya', name: 'Limpia Ya', currency: 'COP', timeZone: 'America/Bogota', businessDate: '2026-05-25', businessDateSimulated: true, todayPolicy: 'fullDay' }],
   expiresAt: '2026-05-25T20:00:00.000Z',
   csrfToken: 'csrf-test',
 };
@@ -36,6 +36,7 @@ export function installFakeApi(options: { loggedIn?: boolean } = {}) {
   const seen = new Map<string, string>();
   const overrides = new Map<string, (body: unknown) => { status: number; body: unknown }>();
   let alerts: unknown[] = [];
+  const payments = new Map<string, { clientMutationId: string; amount: number; paymentDate: string; bankId: string }[]>();
 
   const forecast = (): ForecastResponse => ({
     ...computeForecast(buildForecastInput(snapshot)),
@@ -47,15 +48,17 @@ export function installFakeApi(options: { loggedIn?: boolean } = {}) {
     pendingOperations: 0,
   });
 
-  const reads = (path: string): unknown => {
+  const reads = (path: string, openOnly: boolean): unknown => {
     if (path === '/v2/forecast/14d') return forecast();
     if (path === '/v2/banks') return snapshot.banks;
     if (path === '/v2/counterparties') return snapshot.counterparties.map((c) => ({ ...c, kind: 'customer', aggregated: c.aggregated ?? false }));
-    if (path === '/v2/receivables') return snapshot.receivables.filter((r) => r.pendingAmount > 0);
-    if (path === '/v2/payables') return snapshot.payables.filter((p) => p.pendingAmount > 0);
+    if (path === '/v2/receivables') return snapshot.receivables.filter((r) => !openOnly || r.pendingAmount > 0).map((r) => ({ version: 1, ...r, payments: payments.get(r.id) ?? [] }));
+    if (path === '/v2/payables') return snapshot.payables.filter((p) => !openOnly || p.pendingAmount > 0);
     if (path === '/v2/commitments') return snapshot.commitments.filter((c) => !c.deletedAt);
-    if (path === '/v2/movements') return snapshot.movements;
+    if (path === '/v2/movements') return snapshot.movements.filter((m) => !m.deletedAt).map((m) => ({ version: 1, description: '', ...m }));
     if (path === '/v2/alerts') return alerts;
+    if (path === '/v2/sales') return snapshot.sales;
+    if (path === '/v2/cash-baseline') return snapshot.baseline ? { id: 'baseline', version: 1, ...snapshot.baseline } : null;
     return undefined;
   };
 
@@ -99,8 +102,15 @@ export function installFakeApi(options: { loggedIn?: boolean } = {}) {
     if (!loggedIn) return json(401, { code: 'UNAUTHENTICATED', message: 'no' });
 
     if (method === 'GET') {
-      const read = reads(path);
+      const read = reads(path, url.includes('status=open'));
       if (read !== undefined) return json(200, read);
+    }
+    const mv = /^\/v2\/movements\/([^/]+)$/.exec(path);
+    if (mv && (method === 'PATCH' || method === 'DELETE')) {
+      const op = method === 'PATCH'
+        ? ({ type: 'movement.update', entityId: mv[1]!, payload: { changes: body.changes } } as PendingOperation)
+        : ({ type: 'movement.delete', entityId: mv[1]!, payload: {} } as PendingOperation);
+      return apply(body.clientMutationId, op, { id: mv[1] });
     }
     if (method === 'POST' && path === '/v2/movements') {
       return apply(body.clientMutationId, { type: 'movement.create', payload: { movement: body.movement } }, body.movement);
@@ -112,7 +122,14 @@ export function installFakeApi(options: { loggedIn?: boolean } = {}) {
       if (!target) return json(404, { code: 'NOT_FOUND', message: 'no' });
       if (body.amount > target.pendingAmount) return json(422, { code: 'PAYMENT_EXCEEDS_PENDING', message: 'excede' });
       const type = debt[1] === 'receivables' ? 'receivable.payment' : 'payable.payment';
+      if (!seen.has(body.clientMutationId)) payments.set(debt[2]!, [...(payments.get(debt[2]!) ?? []), body]);
       return apply(body.clientMutationId, { type, entityId: debt[2]!, payload: body } as PendingOperation, target);
+    }
+    const resched = /^\/v2\/receivables\/([^/]+)\/reschedule$/.exec(path);
+    if (method === 'POST' && resched) {
+      const target = snapshot.receivables.find((d) => d.id === resched[1]);
+      if (!target) return json(404, { code: 'NOT_FOUND', message: 'no' });
+      return apply(body.clientMutationId, { type: 'receivable.reschedule', entityId: resched[1]!, payload: { newDueDate: body.newDueDate } }, target);
     }
     if (method === 'POST' && path === '/v2/sale/batch') {
       const { clientMutationId, sale } = body.sales[0];

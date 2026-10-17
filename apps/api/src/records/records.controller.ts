@@ -9,6 +9,7 @@ import {
   DeleteRequestSchema,
   MovementCreateRequestSchema,
   MovementUpdateRequestSchema,
+  RescheduleRequestSchema,
   SaleBatchRequestSchema,
   type BankProjection,
   type SyncOperation,
@@ -154,6 +155,13 @@ export class RecordsController {
   async payReceivable(@Auth() auth: AuthContext, @Store() store: StoreContext, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const { clientMutationId, ...payload } = parseBody(DebtPaymentRequestSchema, body);
     return this.run(auth, store, { type: 'receivable.payment', clientMutationId, dependsOn: [], entityId: id, payload }, res);
+  }
+
+  /** Extensión: la clienta paga otro día. Escritura condicional por versión. */
+  @Post('receivables/:id/reschedule')
+  async reschedule(@Auth() auth: AuthContext, @Store() store: StoreContext, @Param('id') id: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const b = parseBody(RescheduleRequestSchema, body);
+    return this.run(auth, store, { type: 'receivable.reschedule', clientMutationId: b.clientMutationId, dependsOn: [], entityId: id, baseVersion: b.baseVersion, payload: { newDueDate: b.newDueDate } }, res);
   }
 
   @Get('payables')

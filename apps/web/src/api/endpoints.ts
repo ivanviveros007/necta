@@ -1,6 +1,7 @@
 import type {
   AlertEntity,
   BankEntity,
+  BaselineEntity,
   CommitmentEntity,
   CommitmentInput,
   CounterpartyEntity,
@@ -9,6 +10,7 @@ import type {
   MovementInput,
   PayableEntity,
   ReceivableEntity,
+  SaleEntity,
   SessionResponse,
 } from '@necta/contracts';
 import { http } from './client';
@@ -27,6 +29,10 @@ export const api = {
   banks: () => http.get<BankEntity[]>('/v2/banks'),
   counterparties: () => http.get<CounterpartyEntity[]>('/v2/counterparties'),
   receivables: () => http.get<ReceivableEntity[]>('/v2/receivables?status=open'),
+  allReceivables: () => http.get<ReceivableEntity[]>('/v2/receivables'),
+  allPayables: () => http.get<PayableEntity[]>('/v2/payables'),
+  sales: (from: string) => http.get<SaleEntity[]>(`/v2/sales?from=${from}`),
+  baseline: () => http.get<BaselineEntity | null>('/v2/cash-baseline'),
   payables: () => http.get<PayableEntity[]>('/v2/payables?status=open'),
   movements: () => http.get<MovementEntity[]>('/v2/movements'),
   commitments: () => http.get<CommitmentEntity[]>('/v2/commitments'),
@@ -34,8 +40,13 @@ export const api = {
 
   createMovement: (clientMutationId: string, movement: MovementInput) =>
     http.post<Applied<MovementEntity>>('/v2/movements', { clientMutationId, movement }),
+  updateMovement: (id: string, body: { clientMutationId: string; baseVersion: number; changes: { amount?: number; description?: string; date?: string } }) =>
+    http.patch<Applied<MovementEntity>>(`/v2/movements/${id}`, body),
+  deleteMovement: (id: string, body: { clientMutationId: string; baseVersion: number }) => http.delete<Applied<MovementEntity>>(`/v2/movements/${id}`, body),
   collect: (receivableId: string, body: { clientMutationId: string; bankId: string; amount: number; paymentDate: string; method: string }) =>
     http.post<Applied<ReceivableEntity>>(`/v2/receivables/${receivableId}/payments`, body),
+  reschedule: (receivableId: string, body: { clientMutationId: string; baseVersion: number; newDueDate: string }) =>
+    http.post<Applied<ReceivableEntity>>(`/v2/receivables/${receivableId}/reschedule`, body),
   pay: (payableId: string, body: { clientMutationId: string; bankId: string; amount: number; paymentDate: string; method: string }) =>
     http.post<Applied<PayableEntity>>(`/v2/payables/${payableId}/payments`, body),
   createSale: (clientMutationId: string, sale: { id: string; customerId: string; amount: number; paid: boolean; bankId: string; saleDate: string; expiresAt: string | null }) =>

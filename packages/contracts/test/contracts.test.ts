@@ -82,3 +82,11 @@ describe('Cursor opaco', () => {
     expect(decodeCursor(encodeCursor(1).slice(0, 3))).toBeNull();
   });
 });
+
+describe('Reprogramar cobro', () => {
+  it('exige baseVersion y fecha válida', () => {
+    expect(SyncOperationSchema.safeParse({ clientMutationId: 'r1', type: 'receivable.reschedule', entityId: 'rcv', baseVersion: 1, payload: { newDueDate: '2026-06-02' } }).success).toBe(true);
+    expect(SyncOperationSchema.safeParse({ clientMutationId: 'r1', type: 'receivable.reschedule', entityId: 'rcv', payload: { newDueDate: '2026-06-02' } }).success).toBe(false);
+    expect(SyncOperationSchema.safeParse({ clientMutationId: 'r1', type: 'receivable.reschedule', entityId: 'rcv', baseVersion: 1, payload: { newDueDate: '2026-02-31' } }).success).toBe(false);
+  });
+});

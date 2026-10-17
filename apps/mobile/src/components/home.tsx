@@ -26,6 +26,36 @@ export function SectionTitle({ children, right }: { children: string; right?: st
   );
 }
 
+/** Título del encabezado: tienda y, si la fecha es simulada, una marca visible. */
+export function HeaderTitle({ name, badge }: { name: string; badge: string | null }) {
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: '700', color: colors.brand }}>
+        {name}
+      </Text>
+      {badge ? (
+        <Text accessibilityLabel={`${badge}: fecha simulada`} style={{ fontSize: 12, fontWeight: '800', color: '#4A2A00', backgroundColor: colors.warnBg, paddingHorizontal: 8, borderRadius: 999, overflow: 'hidden' }}>
+          {badge}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Título de sección con un enlace a la derecha (p. ej. «Día por día ›»). */
+export function SectionLink({ title, link, onPress }: { title: string; link: string; onPress: () => void }) {
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
+      <Text accessibilityRole="header" style={label}>
+        {title}
+      </Text>
+      <Pressable accessibilityRole="link" accessibilityLabel={link} hitSlop={12} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center' }}>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: colors.brand }}>{link} ›</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 /** Saldo actual y mínimo proyectado: las dos cifras que responden «¿me alcanza?». */
 export function BalanceHeader({ summary }: { summary: Pick<HomeSummary, 'balanceToday' | 'balanceDelta' | 'minBalance'> }) {
   const [showDelta, setShowDelta] = useState(false);
@@ -167,16 +197,17 @@ function StatusPill({ p }: { p: PaymentCoverage }) {
   );
 }
 
-function Row({ date, name, amount, right, a11y }: { date: string; name: string; amount: string; right?: ReactNode; a11y: string }) {
+function Row({ date, name, amount, right, a11y, onPress }: { date: string; name: string; amount: string; right?: ReactNode; a11y: string; onPress?: () => void }) {
   return (
-    <View accessibilityLabel={a11y} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 52, borderBottomWidth: 1, borderColor: colors.line, gap: 8 }}>
+    <Pressable disabled={!onPress} onPress={onPress} accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={a11y} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 52, borderBottomWidth: 1, borderColor: colors.line, gap: 8 }}>
       <Text style={{ width: 54, fontSize: 14, color: colors.muted }}>{date}</Text>
       <Text style={{ flex: 1, fontSize: 16, color: colors.ink }} numberOfLines={1}>
         {name}
       </Text>
       <Text style={[num, { fontSize: 16, fontWeight: '700' }]}>{amount}</Text>
       {right}
-    </View>
+      {onPress ? <Text style={{ fontSize: 20, color: colors.brand }}>›</Text> : null}
+    </Pressable>
   );
 }
 
@@ -202,14 +233,21 @@ export function PaymentsTable({ payments, covered }: { payments: PaymentCoverage
   );
 }
 
-export function CollectionsTable({ items }: { items: HomeSummary['upcoming'] }) {
+export function CollectionsTable({ items, onPress }: { items: HomeSummary['upcoming']; onPress?: (receivableId: string) => void }) {
   const incoming = items.filter((i) => i.amount > 0);
   return (
     <View>
       <SectionTitle>Cobros</SectionTitle>
       {incoming.length === 0 ? <Text style={{ color: colors.muted, fontSize: 15 }}>Sin cobros con fecha</Text> : null}
       {incoming.map((i) => (
-        <Row key={i.key} a11y={`${formatDayShort(i.date)} ${i.label} ${formatMoney(i.amount)}`} date={dayLabel(i.date)} name={i.label.replace(/^Cobro /, '')} amount={`+${formatMoneyCompact(i.amount).replace('$ ', '')}`} />
+        <Row
+          key={i.key}
+          a11y={`${formatDayShort(i.date)} ${i.label} ${formatMoney(i.amount)}`}
+          date={dayLabel(i.date)}
+          name={i.label.replace(/^Cobro /, '')}
+          amount={`+${formatMoneyCompact(i.amount).replace('$ ', '')}`}
+          onPress={onPress && i.kind === 'receivable' && i.sourceId ? () => onPress(i.sourceId!) : undefined}
+        />
       ))}
     </View>
   );
@@ -236,29 +274,31 @@ export function ActionChip({ action, onPress }: { action: HomeSummary['primaryAc
   );
 }
 
-/** Indicador compacto para el encabezado. */
-export function SyncIndicator({ sync, pending, problems, expired, onPress }: { sync: SyncState | null; pending: number; problems: number; expired: boolean; onPress: () => void }) {
-  let color: string = colors.ok;
-  let text = '';
-  if (expired || sync?.phase === 'auth_expired') {
-    color = colors.warn;
-    text = 'Ingresar';
-  } else if (problems > 0) {
-    color = colors.bad;
-    text = `${problems}`;
-  } else if (sync?.phase === 'offline') {
-    color = colors.warn;
-    text = pending ? `Offline · ${pending}` : 'Offline';
-  } else if (sync?.phase === 'syncing') {
-    text = '…';
-  } else if (pending > 0) {
-    color = colors.warn;
-    text = `${pending}`;
-  }
+/** Estado de sincronización en el encabezado: siempre texto + ícono, nunca solo color. */
+export function syncLabel({ sync, pending, problems, expired }: { sync: SyncState | null; pending: number; problems: number; expired: boolean }): { icon: string; text: string; tone: 'ok' | 'warn' | 'bad' } {
+  if (expired || sync?.phase === 'auth_expired') return { icon: '🔒', text: 'Ingresar', tone: 'warn' };
+  if (problems > 0) return { icon: '✕', text: `${problems} revisar`, tone: 'bad' };
+  if (sync?.phase === 'offline') return { icon: '⚡︎', text: pending ? `Sin señal · ${pending}` : 'Sin señal', tone: 'warn' };
+  if (sync?.phase === 'syncing') return { icon: '⟳', text: 'Enviando', tone: 'ok' };
+  if (sync?.phase === 'error') return { icon: '!', text: pending ? `Reintentando · ${pending}` : 'Reintentando', tone: 'warn' };
+  if (pending > 0) return { icon: '⏳', text: `${pending} sin enviar`, tone: 'warn' };
+  return { icon: '✓', text: 'Al día', tone: 'ok' };
+}
+
+export function SyncIndicator(props: { sync: SyncState | null; pending: number; problems: number; expired: boolean; onPress: () => void }) {
+  const { icon, text, tone } = syncLabel(props);
+  const fg = tone === 'ok' ? colors.ok : tone === 'warn' ? colors.warn : colors.bad;
+  const bg = tone === 'ok' ? '#E3F3E8' : tone === 'warn' ? colors.warnBg : colors.badBg;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Sincronización: ${text || 'al día'}`} hitSlop={10} onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 }}>
-      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
-      {text ? <Text style={{ fontSize: 15, fontWeight: '700', color }}>{text}</Text> : null}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Sincronización: ${text}`}
+      hitSlop={10}
+      onPress={props.onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: bg }}
+    >
+      <Text style={{ fontSize: 13, fontWeight: '900', color: fg }}>{icon}</Text>
+      <Text style={{ fontSize: 13, fontWeight: '800', color: fg }}>{text}</Text>
     </Pressable>
   );
 }

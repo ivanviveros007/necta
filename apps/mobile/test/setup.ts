@@ -58,3 +58,10 @@ jest.mock('@expo/ui', () => {
   const RNHostView = ({ children }: { children?: unknown }) => React.createElement(View, null, children);
   return { Host, Picker, BottomSheet, RNHostView };
 });
+
+jest.mock('@expo/ui/community/datetime-picker', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const Picker = ({ value, testID }: { value: Date; testID?: string }) => React.createElement(Text, { testID }, value.toISOString().slice(0, 10));
+  return { __esModule: true, default: Picker, DateTimePicker: Picker };
+});

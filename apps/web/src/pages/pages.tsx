@@ -1,22 +1,12 @@
-import { formatMoney, describeSchedule } from '@necta/cash-engine';
-import { useState, type FormEvent } from 'react';
+import { describeSchedule, formatMoney, formatMoneyCompact, summarizeForecast, todayActivity } from '@necta/cash-engine';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { errorMessage } from '../api/client';
-import {
-  ActionsList,
-  AssumptionsList,
-  BalanceCard,
-  BalanceChart,
-  ConclusionCard,
-  DayTable,
-  DependenciesList,
-  PriorityAction,
-  ScenarioToggle,
-  ShortfallSummary,
-  UnscheduledList,
-} from '../components/forecast';
+import { MovementEditSheet, ReceivableSheet } from '../components/collect';
+import { ActionsTable, AssumptionsToggle, DayTable, ScenarioToggle, UnscheduledTable } from '../components/detail';
+import { ActionChip, BalanceHeader, CashChart, CollectionsTable, KpiRow, PaymentsTable, SectionLink, SectionTitle, TodaySection } from '../components/home';
 import { CollectionForm, CommitmentForm, PaymentForm, SaleForm } from '../components/forms';
-import { useCommitments, useForecast } from '../hooks/queries';
+import { useCommitments, useForecast, useTodayData } from '../hooks/queries';
 import { useOnline } from '../hooks/useOnline';
 import { useAuthenticated, useSession } from '../session/SessionProvider';
 
@@ -68,56 +58,63 @@ export function LoginPage() {
 
 export function HomePage() {
   const { store } = useAuthenticated();
+  const online = useOnline();
   const forecast = useForecast();
-  if (!forecast.data) return <Loading error={forecast.error} />;
+  const today = useTodayData(store.businessDate);
+  const [receivableId, setReceivableId] = useState<string | null>(null);
+  const [movementId, setMovementId] = useState<string | null>(null);
+  const editing = movementId ? (today.data?.movements.find((m) => m.id === movementId) ?? null) : null;
+  const summary = useMemo(() => (forecast.data ? summarizeForecast(forecast.data, 30) : null), [forecast.data]);
+  const activity = useMemo(() => (today.data ? todayActivity({ businessDate: store.businessDate, ...today.data }) : null), [today.data, store.businessDate]);
+  if (!forecast.data || !summary) return <Loading error={forecast.error} />;
   const f = forecast.data;
   return (
     <>
-      <ConclusionCard forecast={f} />
-      <ShortfallSummary expected={f.scenarios.expected} conservative={f.scenarios.conservative} currency={store.currency} />
-      <PriorityAction action={f.actions[0]} />
-      <BalanceCard reference={f.reference} currency={store.currency} />
-      <BalanceChart days={f.scenarios.expected.days} currency={store.currency} />
-      <p>
-        <Link to="/detalle">Ver día por día, supuestos y qué más puedes hacer</Link>
-      </p>
-      <p className="muted small">Calculado {new Date(f.computedAt).toLocaleString('es-CO')} · datos v{f.dataVersion}</p>
+      <BalanceHeader summary={summary} />
+      <SectionLink title="Próximos 14 días" to="/detalle" link="Día por día" />
+      <CashChart days={f.scenarios.expected.days} />
+      <KpiRow totals={summary.totals} />
+      <ActionChip
+        action={summary.primaryAction}
+        onPress={() => {
+          const a = summary.primaryAction;
+          if (a && (a.kind === 'confirm_collection' || a.kind === 'collect') && a.sourceId) setReceivableId(a.sourceId);
+        }}
+      />
+      <PaymentsTable payments={summary.payments} covered={summary.coveredCount} />
+      <CollectionsTable items={summary.upcoming} onPress={setReceivableId} />
+      {activity ? <TodaySection activity={activity} onEdit={(item) => setMovementId(item.movementId ?? null)} /> : null}
+      <MovementEditSheet movement={editing} businessDate={store.businessDate} online={online} onClose={() => setMovementId(null)} />
+      <ReceivableSheet receivableId={receivableId} businessDate={store.businessDate} online={online} onClose={() => setReceivableId(null)} />
     </>
   );
 }
 
 export function DetailPage() {
   const { store } = useAuthenticated();
+  const online = useOnline();
   const forecast = useForecast();
   const [scenario, setScenario] = useState<'expected' | 'conservative'>('expected');
+  const [receivableId, setReceivableId] = useState<string | null>(null);
   if (!forecast.data) return <Loading error={forecast.error} />;
   const f = forecast.data;
+  const removed = f.scenarios.conservative.removedInflow;
   return (
     <>
       <h1>Día por día</h1>
       <ScenarioToggle value={scenario} onChange={setScenario} />
-      {scenario === 'conservative' && f.scenarios.conservative.removedInflow && (
-        <p className="note">
-          Prueba de estrés: igual al esperado pero sin {f.scenarios.conservative.removedInflow.label} ({formatMoney(f.scenarios.conservative.removedInflow.amount, store.currency)}). No es el peor caso posible.
-        </p>
-      )}
-      <DayTable scenario={f.scenarios[scenario]} currency={store.currency} />
-      <section className="card">
-        <h2>Qué puedes hacer</h2>
-        <ActionsList actions={f.actions} />
-      </section>
-      <section className="card">
-        <h2>De qué depende</h2>
-        <DependenciesList dependencies={f.dependencies} />
-      </section>
-      <section className="card">
-        <h2>Cobros sin fecha confiable (no sumados)</h2>
-        <UnscheduledList items={f.unscheduledReceivables} currency={store.currency} />
-      </section>
-      <section className="card">
-        <h2>Supuestos</h2>
-        <AssumptionsList assumptions={f.assumptions} />
-      </section>
+      {scenario === 'conservative' && removed ? (
+        <span className="pill pill-bad">
+          Sin {removed.label.replace(/^Cobro /, '')} (−{formatMoneyCompact(removed.amount).replace('$ ', '')})
+        </span>
+      ) : null}
+      <DayTable scenario={f.scenarios[scenario]} />
+      <SectionTitle>Acciones</SectionTitle>
+      <ActionsTable actions={f.actions} onReceivable={setReceivableId} />
+      <SectionTitle>Por cobrar sin fecha (no suma)</SectionTitle>
+      <UnscheduledTable items={f.unscheduledReceivables} onReceivable={setReceivableId} />
+      <AssumptionsToggle assumptions={f.assumptions} />
+      <ReceivableSheet receivableId={receivableId} businessDate={store.businessDate} online={online} onClose={() => setReceivableId(null)} />
     </>
   );
 }

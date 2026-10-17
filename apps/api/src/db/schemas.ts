@@ -77,6 +77,7 @@ export const ReceivableSchema = syncSchema({
   totalAmount: { type: Number, required: true },
   pendingAmount: { type: Number, required: true },
   creditDueBy: { type: String, default: null },
+  originalDueBy: { type: String, default: null },
   dueHint: { type: String, default: null },
   sourceSaleId: { type: String, default: null },
   payments: { type: [DebtPaymentSchema], default: [] },

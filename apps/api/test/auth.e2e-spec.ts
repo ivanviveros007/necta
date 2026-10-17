@@ -15,7 +15,7 @@ describe('Sesiones y permisos', () => {
     expect(res.body.accessToken).toEqual(expect.any(String));
     expect(new Date(res.body.expiresAt).getTime()).toBeGreaterThan(Date.now());
     expect(res.headers['set-cookie']).toBeUndefined();
-    expect(res.body.stores[0]).toMatchObject({ id: STORE, currency: 'COP', businessDate: '2026-05-25', todayPolicy: 'fullDay' });
+    expect(res.body.stores[0]).toMatchObject({ id: STORE, currency: 'COP', businessDate: '2026-05-25', businessDateSimulated: true, todayPolicy: 'fullDay' });
   });
 
   it('web: cookie HttpOnly SameSite=Lax y cookie CSRF, sin token en el cuerpo', async () => {

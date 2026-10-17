@@ -62,6 +62,7 @@ export class AuthService {
       currency: s.currency,
       timeZone: s.timeZone,
       businessDate: this.clock.businessDate(s.timeZone),
+      businessDateSimulated: this.clock.isSimulated(),
       todayPolicy: this.clock.todayPolicy(),
     }));
   }

@@ -10,7 +10,7 @@ export type PendingOperation =
       type: 'movement.create';
       payload: { movement: { id: string; kind: 'income' | 'expense'; amount: number; bankId: string; date: string } };
     }
-  | { type: 'movement.update'; entityId: string; payload: { changes: { amount?: number; date?: string } } }
+  | { type: 'movement.update'; entityId: string; payload: { changes: { amount?: number; date?: string; description?: string } } }
   | { type: 'movement.delete'; entityId: string; payload?: unknown }
   | {
       type: 'sale.create';
@@ -27,6 +27,7 @@ export type PendingOperation =
     }
   | { type: 'receivable.payment'; entityId: string; payload: { bankId: string; amount: number; paymentDate: string } }
   | { type: 'payable.payment'; entityId: string; payload: { bankId: string; amount: number; paymentDate: string } }
+  | { type: 'receivable.reschedule'; entityId: string; payload: { newDueDate: string } }
   | {
       type: 'commitment.create';
       payload: {
@@ -82,6 +83,7 @@ export function applyPendingOperations(base: StoreSnapshot, operations: readonly
         }
         m.amount = newAmount;
         if (op.payload.changes.date) m.date = op.payload.changes.date;
+        if (op.payload.changes.description !== undefined) (m as { description?: string }).description = op.payload.changes.description;
         break;
       }
       case 'movement.delete': {
@@ -122,6 +124,11 @@ export function applyPendingOperations(base: StoreSnapshot, operations: readonly
         const amount = Math.min(op.payload.amount, r.pendingAmount);
         r.pendingAmount -= amount;
         adjustBank(s, op.payload.bankId, amount, op.payload.paymentDate);
+        break;
+      }
+      case 'receivable.reschedule': {
+        const r = s.receivables.find((x) => x.id === op.entityId);
+        if (r) r.creditDueBy = op.payload.newDueDate;
         break;
       }
       case 'payable.payment': {
